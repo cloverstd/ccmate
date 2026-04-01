@@ -1,0 +1,43 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+
+database:
+  driver: "sqlite3"
+  dsn: "data/ccmate.db?_fk=1&_journal=WAL"
+
+github:
+  app_id: 0
+  private_key_path: ""
+  webhook_secret: ""
+  # For local development only:
+  # personal_token: ""
+
+agent:
+  providers:
+    - name: "claude-code"
+      binary: "claude"
+      # Additional agent-specific config
+
+storage:
+  base_path: "data"
+  attachments_dir: "attachments"
+  logs_dir: "logs"
+  workspaces_dir: "workspaces"
+
+auth:
+  rp_display_name: "ccmate"
+  rp_id: "localhost"
+  rp_origins:
+    - "http://localhost:8080"
+  session_key: "" # Will be auto-generated if empty
+
+limits:
+  task_timeout_minutes: 60
+  max_log_size_mb: 50
+  max_attachment_size_mb: 10
+  max_total_attachments_mb: 30
+  default_max_concurrency: 2
+  retention_success_days: 7
+  retention_failure_days: 30
+  retention_audit_days: 180

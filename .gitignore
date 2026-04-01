@@ -1,0 +1,44 @@
+# Binaries
+/bin/
+/ccmate-server
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Build output
+/static/dist/
+
+# Database
+*.db
+*.db-journal
+*.db-wal
+
+# Data directories
+/data/
+/workspaces/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# Go
+/vendor/
+
+# Frontend
+web/node_modules/
+web/dist/
+
+# Config with secrets
+config.yaml
