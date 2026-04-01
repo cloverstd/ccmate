@@ -1,13 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { modelsApi, type AgentProfile } from '../lib/api'
+import { modelsApi, authApi, type AgentProfile } from '../lib/api'
 
 export default function SettingsPage() {
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ provider: '', model: '', supports_image: false, supports_resume: false, config_json: '{}' })
+  const [passkeyMsg, setPasskeyMsg] = useState('')
 
   const { data: models } = useQuery({ queryKey: ['models'], queryFn: modelsApi.list })
+  const { data: me } = useQuery({ queryKey: ['me'], queryFn: authApi.me })
 
   const createMutation = useMutation({
     mutationFn: () => modelsApi.create(form),
@@ -19,10 +21,65 @@ export default function SettingsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['models'] }),
   })
 
+  const handleRegisterPasskey = async () => {
+    setPasskeyMsg('')
+    try {
+      const options = await authApi.passkeyRegisterStart() as Record<string, unknown>
+      const pubKey = (options as { publicKey: Record<string, unknown> }).publicKey
+      pubKey.challenge = base64urlToBuffer(pubKey.challenge as string)
+      ;(pubKey.user as Record<string, unknown>).id = base64urlToBuffer((pubKey.user as Record<string, unknown>).id as string)
+
+      const credential = await navigator.credentials.create({ publicKey: pubKey as unknown as PublicKeyCredentialCreationOptions }) as PublicKeyCredential
+      if (!credential) { setPasskeyMsg('Registration cancelled.'); return }
+
+      const response = credential.response as AuthenticatorAttestationResponse
+      await authApi.passkeyRegisterFinish({
+        id: credential.id,
+        rawId: bufferToBase64url(credential.rawId),
+        type: credential.type,
+        response: {
+          attestationObject: bufferToBase64url(response.attestationObject),
+          clientDataJSON: bufferToBase64url(response.clientDataJSON),
+        },
+      })
+      setPasskeyMsg('Passkey registered successfully!')
+      queryClient.invalidateQueries({ queryKey: ['me'] })
+    } catch {
+      setPasskeyMsg('Passkey registration failed.')
+    }
+  }
+
+  const handleRemovePasskey = async () => {
+    await authApi.passkeyRemove()
+    setPasskeyMsg('Passkey removed.')
+    queryClient.invalidateQueries({ queryKey: ['me'] })
+  }
+
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">Settings</h1>
 
+      {/* Passkey Management */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <h2 className="text-lg font-semibold mb-4">Passkey Authentication</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          Configure a Passkey to enable password-less login as an alternative to GitHub OAuth.
+        </p>
+        {passkeyMsg && <div className="mb-3 p-2 bg-blue-50 text-blue-700 rounded text-sm">{passkeyMsg}</div>}
+        {me?.has_passkey ? (
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-green-600 font-medium">Passkey configured</span>
+            <button onClick={handleRemovePasskey} className="text-sm text-red-500 hover:underline">Remove</button>
+          </div>
+        ) : (
+          <button onClick={handleRegisterPasskey}
+            className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">
+            Register Passkey
+          </button>
+        )}
+      </div>
+
+      {/* Agent Profiles */}
       <div className="bg-white rounded-lg shadow p-6 mb-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Agent Profiles</h2>
@@ -88,4 +145,20 @@ export default function SettingsPage() {
       </div>
     </div>
   )
+}
+
+function bufferToBase64url(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  let str = ''
+  for (const b of bytes) str += String.fromCharCode(b)
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+}
+
+function base64urlToBuffer(base64url: string): ArrayBuffer {
+  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4)
+  const binary = atob(padded)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return bytes.buffer
 }

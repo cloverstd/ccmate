@@ -9,7 +9,7 @@ import SettingsPage from './pages/SettingsPage'
 import { useAuth } from './hooks/useAuth'
 
 function App() {
-  const { isAuthenticated, isLoading } = useAuth()
+  const { user, isAuthenticated, isLoading, logout } = useAuth()
 
   if (isLoading) {
     return (
@@ -24,7 +24,7 @@ function App() {
   }
 
   return (
-    <Layout>
+    <Layout user={user!} onLogout={logout}>
       <Routes>
         <Route path="/" element={<Navigate to="/projects" replace />} />
         <Route path="/projects" element={<ProjectListPage />} />

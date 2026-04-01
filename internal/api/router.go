@@ -28,31 +28,32 @@ func NewRouter(
 ) http.Handler {
 	r := chi.NewRouter()
 
-	// Global middleware
 	r.Use(chimw.RequestID)
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Recoverer)
 	r.Use(middleware.Logger)
 	r.Use(middleware.CORS)
 
-	// Auth handlers
 	authHandler := handler.NewAuthHandler(client, cfg, passkeySvc)
-	// Project handlers
 	projectHandler := handler.NewProjectHandler(client)
-	// Task handlers
 	taskHandler := handler.NewTaskHandler(client, cfg, broker, sched)
-	// Webhook handler
 	webhookHandler := handler.NewWebhookHandler(client, cfg, sched)
 	if gitProv != nil {
 		webhookHandler.SetGitProvider(gitProv)
 	}
 
-	// Public routes
+	// Public auth routes
 	r.Route("/api/auth", func(r chi.Router) {
-		r.Post("/passkey/register/start", authHandler.RegisterStart)
-		r.Post("/passkey/register/finish", authHandler.RegisterFinish)
-		r.Post("/passkey/login/start", authHandler.LoginStart)
-		r.Post("/passkey/login/finish", authHandler.LoginFinish)
+		// GitHub OAuth
+		r.Get("/github/start", authHandler.GitHubOAuthStart)
+		r.Get("/github/callback", authHandler.GitHubOAuthCallback)
+
+		// Passkey login (for users who already configured passkey)
+		r.Post("/passkey/login/start", authHandler.PasskeyLoginStart)
+		r.Post("/passkey/login/finish", authHandler.PasskeyLoginFinish)
+
+		// Logout
+		r.Post("/logout", authHandler.Logout)
 	})
 
 	// Webhook routes (authenticated via signature)
@@ -64,6 +65,14 @@ func NewRouter(
 	// Protected API routes
 	r.Route("/api", func(r chi.Router) {
 		r.Use(middleware.RequireAuth(passkeySvc))
+
+		// Current user info
+		r.Get("/auth/me", authHandler.GetCurrentUser)
+
+		// Passkey management (post-login)
+		r.Post("/auth/passkey/register/start", authHandler.PasskeyRegisterStart)
+		r.Post("/auth/passkey/register/finish", authHandler.PasskeyRegisterFinish)
+		r.Delete("/auth/passkey", authHandler.PasskeyRemove)
 
 		// Projects
 		r.Get("/projects", projectHandler.List)
@@ -101,9 +110,7 @@ func NewRouter(
 		r.Delete("/models/{id}", projectHandler.DeleteModel)
 	})
 
-	// Serve frontend static files
 	fileServer(r)
-
 	return r
 }
 
@@ -116,19 +123,15 @@ func fileServer(r chi.Router) {
 
 	r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
-
 		if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/webhooks/") || path == "/metrics" {
 			http.NotFound(w, r)
 			return
 		}
-
 		if f, err := distFS.Open(strings.TrimPrefix(path, "/")); err == nil {
 			f.Close()
 			fsHandler.ServeHTTP(w, r)
 			return
 		}
-
-		// SPA fallback
 		r.URL.Path = "/"
 		fsHandler.ServeHTTP(w, r)
 	})

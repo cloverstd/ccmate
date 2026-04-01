@@ -9,6 +9,7 @@
 
 # Build output
 /static/dist/
+internal/static/dist/
 
 # Database
 *.db
@@ -42,3 +43,4 @@ web/dist/
 
 # Config with secrets
 config.yaml
+ccmate.db-shm

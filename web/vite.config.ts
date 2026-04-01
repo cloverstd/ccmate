@@ -9,9 +9,10 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    allowedHosts: true,
     proxy: {
-      '/api': 'http://localhost:8080',
-      '/webhooks': 'http://localhost:8080',
+      '/api': 'http://localhost:8880',
+      '/webhooks': 'http://localhost:8880',
     },
   },
 })

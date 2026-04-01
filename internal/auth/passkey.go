@@ -13,20 +13,16 @@ import (
 	"github.com/gorilla/securecookie"
 )
 
-// PasskeyService handles WebAuthn registration and authentication.
+// PasskeyService handles WebAuthn registration and session management.
 type PasskeyService struct {
 	webAuthn     *webauthn.WebAuthn
 	secureCookie *securecookie.SecureCookie
 
-	mu   sync.RWMutex
-	user *AdminUser // single admin user
-
-	// Bootstrap token for first-time registration
-	bootstrapToken string
-	registered     bool
+	mu    sync.RWMutex
+	users map[string]*AdminUser // github_login -> AdminUser
 }
 
-// AdminUser implements webauthn.User for the single admin.
+// AdminUser implements webauthn.User.
 type AdminUser struct {
 	ID          []byte
 	Name        string
@@ -39,7 +35,7 @@ func (u *AdminUser) WebAuthnName() string                       { return u.Name 
 func (u *AdminUser) WebAuthnDisplayName() string                { return u.DisplayName }
 func (u *AdminUser) WebAuthnCredentials() []webauthn.Credential { return u.Credentials }
 
-// NewPasskeyService creates a new Passkey authentication service.
+// NewPasskeyService creates a new Passkey + session service.
 func NewPasskeyService(cfg *config.AuthConfig) (*PasskeyService, error) {
 	wconfig := &webauthn.Config{
 		RPDisplayName: cfg.RPDisplayName,
@@ -52,63 +48,43 @@ func NewPasskeyService(cfg *config.AuthConfig) (*PasskeyService, error) {
 		return nil, fmt.Errorf("creating webauthn: %w", err)
 	}
 
-	// Derive session encryption key
 	sessionKey := []byte(cfg.SessionKey)
 	if len(sessionKey) == 0 {
 		sessionKey = securecookie.GenerateRandomKey(32)
 	}
 	sc := securecookie.New(sessionKey, securecookie.GenerateRandomKey(32))
 
-	// Generate bootstrap token
-	tokenBytes := make([]byte, 16)
-	if _, err := rand.Read(tokenBytes); err != nil {
-		return nil, fmt.Errorf("generating bootstrap token: %w", err)
-	}
-	bootstrapToken := hex.EncodeToString(tokenBytes)
-
-	slog.Info("bootstrap token generated (use this for first-time admin registration)",
-		"token", bootstrapToken)
-
 	return &PasskeyService{
-		webAuthn:       w,
-		secureCookie:   sc,
-		bootstrapToken: bootstrapToken,
+		webAuthn:     w,
+		secureCookie: sc,
+		users:        make(map[string]*AdminUser),
 	}, nil
 }
 
-// IsRegistered returns whether the admin has been registered.
-func (s *PasskeyService) IsRegistered() bool {
+// HasPasskey checks if a user has registered a passkey.
+func (s *PasskeyService) HasPasskey(username string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.registered
+	u, ok := s.users[username]
+	return ok && len(u.Credentials) > 0
 }
 
-// ValidateBootstrapToken checks if the provided token matches.
-func (s *PasskeyService) ValidateBootstrapToken(token string) bool {
-	return s.bootstrapToken != "" && token == s.bootstrapToken
-}
-
-// BeginRegistration starts the WebAuthn registration process.
-func (s *PasskeyService) BeginRegistration(ctx context.Context) (*webauthn.SessionData, interface{}, error) {
+// BeginRegistration starts passkey registration for a logged-in user.
+func (s *PasskeyService) BeginRegistration(ctx context.Context, username string) (*webauthn.SessionData, interface{}, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.registered {
-		return nil, nil, fmt.Errorf("admin already registered")
+	user, ok := s.users[username]
+	if !ok {
+		userID := make([]byte, 32)
+		if _, err := rand.Read(userID); err != nil {
+			return nil, nil, fmt.Errorf("generating user ID: %w", err)
+		}
+		user = &AdminUser{ID: userID, Name: username, DisplayName: username}
+		s.users[username] = user
 	}
 
-	userID := make([]byte, 32)
-	if _, err := rand.Read(userID); err != nil {
-		return nil, nil, fmt.Errorf("generating user ID: %w", err)
-	}
-
-	s.user = &AdminUser{
-		ID:          userID,
-		Name:        "admin",
-		DisplayName: "Admin",
-	}
-
-	options, session, err := s.webAuthn.BeginRegistration(s.user)
+	options, session, err := s.webAuthn.BeginRegistration(user)
 	if err != nil {
 		return nil, nil, fmt.Errorf("begin registration: %w", err)
 	}
@@ -116,38 +92,52 @@ func (s *PasskeyService) BeginRegistration(ctx context.Context) (*webauthn.Sessi
 	return session, options, nil
 }
 
-// FinishRegistration completes the WebAuthn registration.
-func (s *PasskeyService) FinishRegistration(ctx context.Context, session *webauthn.SessionData, credential *webauthn.Credential) error {
+// FinishRegistration completes passkey registration.
+func (s *PasskeyService) FinishRegistration(ctx context.Context, username string, session *webauthn.SessionData, credential *webauthn.Credential) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.user == nil {
-		return fmt.Errorf("no pending registration")
+	user, ok := s.users[username]
+	if !ok {
+		return fmt.Errorf("user not found")
 	}
 
-	s.user.Credentials = append(s.user.Credentials, *credential)
-	s.registered = true
-	s.bootstrapToken = "" // Invalidate bootstrap token
-
-	slog.Info("admin registered successfully")
+	user.Credentials = append(user.Credentials, *credential)
+	slog.Info("passkey registered", "user", username)
 	return nil
 }
 
-// BeginLogin starts the WebAuthn login process.
-func (s *PasskeyService) BeginLogin(ctx context.Context) (*webauthn.SessionData, interface{}, error) {
+// BeginLogin starts passkey login for a user.
+func (s *PasskeyService) BeginLogin(ctx context.Context, username string) (*webauthn.SessionData, interface{}, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	if !s.registered || s.user == nil {
-		return nil, nil, fmt.Errorf("admin not registered")
+	user, ok := s.users[username]
+	if !ok || len(user.Credentials) == 0 {
+		return nil, nil, fmt.Errorf("no passkey registered for user")
 	}
 
-	options, session, err := s.webAuthn.BeginLogin(s.user)
+	options, session, err := s.webAuthn.BeginLogin(user)
 	if err != nil {
 		return nil, nil, fmt.Errorf("begin login: %w", err)
 	}
 
 	return session, options, nil
+}
+
+// GetUser returns the user for passkey validation.
+func (s *PasskeyService) GetUser(username string) *AdminUser {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.users[username]
+}
+
+// RemovePasskey removes all passkeys for a user.
+func (s *PasskeyService) RemovePasskey(username string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.users, username)
+	slog.Info("passkey removed", "user", username)
 }
 
 // EncodeSession creates a signed session cookie value.
@@ -167,27 +157,13 @@ func (s *PasskeyService) WebAuthn() *webauthn.WebAuthn {
 	return s.webAuthn
 }
 
-// User returns the admin user.
-func (s *PasskeyService) User() *AdminUser {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.user
-}
-
-// ResetAdmin clears the admin registration, allowing re-registration.
+// ResetAdmin clears all passkey registrations.
 func (s *PasskeyService) ResetAdmin() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.user = nil
-	s.registered = false
+	s.users = make(map[string]*AdminUser)
 
-	// Generate new bootstrap token
 	tokenBytes := make([]byte, 16)
-	if _, err := rand.Read(tokenBytes); err != nil {
-		return
-	}
-	s.bootstrapToken = hex.EncodeToString(tokenBytes)
-
-	slog.Info("admin registration reset, new bootstrap token generated",
-		"token", s.bootstrapToken)
+	rand.Read(tokenBytes)
+	slog.Info("all passkey registrations cleared", "token", hex.EncodeToString(tokenBytes))
 }

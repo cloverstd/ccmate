@@ -1,16 +1,25 @@
 import { useState, useEffect } from 'react'
-import { authApi } from '../lib/api'
+import { authApi, type CurrentUser } from '../lib/api'
 
 export function useAuth() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [user, setUser] = useState<CurrentUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    authApi.checkSession().then((authed) => {
-      setIsAuthenticated(authed)
+    authApi.checkSession().then((u) => {
+      setUser(u)
       setIsLoading(false)
     })
   }, [])
 
-  return { isAuthenticated, isLoading, setIsAuthenticated }
+  return {
+    user,
+    isAuthenticated: !!user,
+    isLoading,
+    setUser,
+    logout: async () => {
+      await authApi.logout()
+      setUser(null)
+    },
+  }
 }

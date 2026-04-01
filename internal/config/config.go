@@ -60,10 +60,31 @@ type StorageConfig struct {
 }
 
 type AuthConfig struct {
+	// GitHub OAuth
+	GitHubClientID     string   `koanf:"github_client_id"`
+	GitHubClientSecret string   `koanf:"github_client_secret"`
+	AllowedUsers       []string `koanf:"allowed_users"`
+
+	// Passkey / WebAuthn
 	RPDisplayName string   `koanf:"rp_display_name"`
 	RPID          string   `koanf:"rp_id"`
 	RPOrigins     []string `koanf:"rp_origins"`
-	SessionKey    string   `koanf:"session_key"`
+
+	// Session
+	SessionKey string `koanf:"session_key"`
+}
+
+// IsUserAllowed checks if a GitHub username is in the whitelist.
+func (a *AuthConfig) IsUserAllowed(username string) bool {
+	if len(a.AllowedUsers) == 0 {
+		return false
+	}
+	for _, u := range a.AllowedUsers {
+		if strings.EqualFold(u, username) {
+			return true
+		}
+	}
+	return false
 }
 
 type LimitsConfig struct {
@@ -80,14 +101,12 @@ type LimitsConfig struct {
 func Load(path string) (*Config, error) {
 	k := koanf.New(".")
 
-	// Load YAML config file
 	if path != "" {
 		if err := k.Load(file.Provider(path), yaml.Parser()); err != nil {
 			return nil, fmt.Errorf("loading config file: %w", err)
 		}
 	}
 
-	// Override with environment variables (CCMATE_SERVER_PORT -> server.port)
 	if err := k.Load(env.Provider("CCMATE_", ".", func(s string) string {
 		return strings.Replace(
 			strings.ToLower(strings.TrimPrefix(s, "CCMATE_")),
@@ -107,19 +126,14 @@ func Load(path string) (*Config, error) {
 
 func DefaultConfig() *Config {
 	return &Config{
-		Server: ServerConfig{
-			Host: "0.0.0.0",
-			Port: 8080,
-		},
+		Server: ServerConfig{Host: "0.0.0.0", Port: 8080},
 		Database: DatabaseConfig{
 			Driver: "sqlite3",
 			DSN:    "data/ccmate.db?_fk=1&_journal=WAL",
 		},
 		Storage: StorageConfig{
-			BasePath:       "data",
-			AttachmentsDir: "attachments",
-			LogsDir:        "logs",
-			WorkspacesDir:  "workspaces",
+			BasePath: "data", AttachmentsDir: "attachments",
+			LogsDir: "logs", WorkspacesDir: "workspaces",
 		},
 		Auth: AuthConfig{
 			RPDisplayName: "ccmate",
@@ -127,14 +141,10 @@ func DefaultConfig() *Config {
 			RPOrigins:     []string{"http://localhost:8080"},
 		},
 		Limits: LimitsConfig{
-			TaskTimeoutMinutes:    60,
-			MaxLogSizeMB:          50,
-			MaxAttachmentSizeMB:   10,
-			MaxTotalAttachmentsMB: 30,
-			DefaultMaxConcurrency: 2,
-			RetentionSuccessDays:  7,
-			RetentionFailureDays:  30,
-			RetentionAuditDays:    180,
+			TaskTimeoutMinutes: 60, MaxLogSizeMB: 50,
+			MaxAttachmentSizeMB: 10, MaxTotalAttachmentsMB: 30,
+			DefaultMaxConcurrency: 2, RetentionSuccessDays: 7,
+			RetentionFailureDays: 30, RetentionAuditDays: 180,
 		},
 	}
 }

@@ -15,6 +15,37 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json()
 }
 
+// Auth
+export interface CurrentUser {
+  user: string
+  has_passkey: boolean
+}
+
+export const authApi = {
+  me: () => request<CurrentUser>('/auth/me'),
+  checkSession: async (): Promise<CurrentUser | null> => {
+    try { return await request<CurrentUser>('/auth/me') } catch { return null }
+  },
+  logout: () => fetch(`${BASE_URL}/auth/logout`, { method: 'POST' }),
+
+  // Passkey management (post-login)
+  passkeyRegisterStart: () => request<unknown>('/auth/passkey/register/start', { method: 'POST' }),
+  passkeyRegisterFinish: (body: unknown) => request<unknown>('/auth/passkey/register/finish', {
+    method: 'POST', body: JSON.stringify(body),
+  }),
+  passkeyRemove: () => request<unknown>('/auth/passkey', { method: 'DELETE' }),
+
+  // Passkey login (public)
+  passkeyLoginStart: (username: string) => fetch(`${BASE_URL}/auth/passkey/login/start`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username }),
+  }),
+  passkeyLoginFinish: (username: string, body: unknown) => fetch(`${BASE_URL}/auth/passkey/login/finish`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, response_data: body }),
+  }),
+}
+
 // Projects
 export interface Project {
   id: number; name: string; repo_url: string; git_provider: string
@@ -120,10 +151,4 @@ export function subscribeToTaskEvents(taskId: number, onEvent: (event: { type: s
     })
   }
   return () => eventSource.close()
-}
-
-export const authApi = {
-  checkSession: async (): Promise<boolean> => {
-    try { await request('/projects'); return true } catch { return false }
-  },
 }
