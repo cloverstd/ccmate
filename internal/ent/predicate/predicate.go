@@ -39,6 +39,9 @@ type SessionEvent func(*sql.Selector)
 // SessionMessage is the predicate function for sessionmessage builders.
 type SessionMessage func(*sql.Selector)
 
+// SystemSetting is the predicate function for systemsetting builders.
+type SystemSetting func(*sql.Selector)
+
 // Task is the predicate function for task builders.
 type Task func(*sql.Selector)
 

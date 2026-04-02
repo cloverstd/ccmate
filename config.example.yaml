@@ -1,51 +1,10 @@
+# Only server and database are configured here.
+# All other settings are configured via the web setup wizard on first launch.
+
 server:
   host: "0.0.0.0"
-  port: 8080
+  port: 8880
 
 database:
   driver: "sqlite3"
-  dsn: "data/ccmate.db?_fk=1&_journal=WAL"
-
-github:
-  app_id: 0
-  installation_id: 0
-  private_key_path: ""
-  webhook_secret: ""
-  # For local development only:
-  # personal_token: ""
-
-agent:
-  providers:
-    - name: "claude-code"
-      binary: "claude"
-
-storage:
-  base_path: "data"
-  attachments_dir: "attachments"
-  logs_dir: "logs"
-  workspaces_dir: "workspaces"
-
-auth:
-  # GitHub OAuth (required for login)
-  github_client_id: ""
-  github_client_secret: ""
-  # Only these GitHub users can log in
-  allowed_users:
-    - "your-github-username"
-
-  # Passkey / WebAuthn (configured post-login in Settings)
-  rp_display_name: "ccmate"
-  rp_id: "localhost"
-  rp_origins:
-    - "http://localhost:8080"
-  session_key: "" # Auto-generated if empty
-
-limits:
-  task_timeout_minutes: 60
-  max_log_size_mb: 50
-  max_attachment_size_mb: 10
-  max_total_attachments_mb: 30
-  default_max_concurrency: 2
-  retention_success_days: 7
-  retention_failure_days: 30
-  retention_audit_days: 180
+  dsn: "ccmate.db?_fk=1&_journal=WAL"

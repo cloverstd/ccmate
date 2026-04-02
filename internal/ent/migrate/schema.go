@@ -112,7 +112,6 @@ var (
 		{Name: "git_provider", Type: field.TypeString, Default: "github"},
 		{Name: "default_branch", Type: field.TypeString, Default: "main"},
 		{Name: "auto_mode", Type: field.TypeBool, Default: false},
-		{Name: "max_concurrency", Type: field.TypeInt, Default: 2},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 	}
@@ -275,6 +274,26 @@ var (
 			},
 		},
 	}
+	// SystemSettingsColumns holds the columns for the "system_settings" table.
+	SystemSettingsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "key", Type: field.TypeString},
+		{Name: "value", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// SystemSettingsTable holds the schema information for the "system_settings" table.
+	SystemSettingsTable = &schema.Table{
+		Name:       "system_settings",
+		Columns:    SystemSettingsColumns,
+		PrimaryKey: []*schema.Column{SystemSettingsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "systemsetting_key",
+				Unique:  true,
+				Columns: []*schema.Column{SystemSettingsColumns[1]},
+			},
+		},
+	}
 	// TasksColumns holds the columns for the "tasks" table.
 	TasksColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -350,6 +369,7 @@ var (
 		SessionsTable,
 		SessionEventsTable,
 		SessionMessagesTable,
+		SystemSettingsTable,
 		TasksTable,
 		WebhookReceiptsTable,
 	}

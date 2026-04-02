@@ -21,6 +21,12 @@ type GitProvider interface {
 	GetPullRequestDiff(ctx context.Context, repo model.RepoRef, prNumber int) (string, error)
 	IsAuthorizedCommenter(ctx context.Context, repo model.RepoRef, user string) (bool, error)
 	CloneRepo(ctx context.Context, repo model.RepoRef, destPath string, branch string) error
+	ListRepoIssues(ctx context.Context, repo model.RepoRef) ([]model.Issue, error)
+	ListRepoPRs(ctx context.Context, repo model.RepoRef) ([]model.PullRequest, error)
+	CreateIssue(ctx context.Context, repo model.RepoRef, title string, body string, labels []string) (*model.Issue, error)
+	ListAccessibleRepos(ctx context.Context) ([]model.RepoInfo, error)
+	CloseIssue(ctx context.Context, repo model.RepoRef, issueNumber int) error
+	MergePullRequest(ctx context.Context, repo model.RepoRef, prNumber int) error
 }
 
 // GitProviderFactory creates GitProvider instances.

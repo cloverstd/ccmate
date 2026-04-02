@@ -2,6 +2,7 @@ package mock
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cloverstd/ccmate/internal/agentprovider"
@@ -14,20 +15,31 @@ type Factory struct{}
 func (f *Factory) Name() string { return "mock" }
 
 func (f *Factory) Create(cfg agentprovider.AgentConfig) (agentprovider.AgentAdapter, error) {
-	return &Adapter{}, nil
+	return &Adapter{debug: cfg.Extra["debug"] == "true"}, nil
 }
 
 // Adapter is a mock agent that simulates development work.
 type Adapter struct {
 	running bool
+	debug   bool
 }
 
 func (a *Adapter) StartSession(ctx context.Context, req agentprovider.StartSessionRequest) (*agentprovider.SessionHandle, error) {
 	a.running = true
-	return &agentprovider.SessionHandle{
+	handle := &agentprovider.SessionHandle{
 		ID:       "mock-session-1",
 		Provider: "mock",
-	}, nil
+	}
+	if a.debug {
+		handle.DebugInfo = map[string]string{
+			"provider":          "mock (NOT calling real agent)",
+			"note":              "Configure agent_providers in Settings with name=claude-code to use real Claude",
+			"workdir":           req.WorkDir,
+			"system_prompt_len": fmt.Sprintf("%d", len(req.SystemPrompt)),
+			"task_prompt_len":   fmt.Sprintf("%d", len(req.TaskPrompt)),
+		}
+	}
+	return handle, nil
 }
 
 func (a *Adapter) SendInput(ctx context.Context, handle *agentprovider.SessionHandle, input agentprovider.UserInput) error {

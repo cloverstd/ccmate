@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/cloverstd/ccmate/internal/config"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/gorilla/securecookie"
 )
@@ -35,8 +34,16 @@ func (u *AdminUser) WebAuthnName() string                       { return u.Name 
 func (u *AdminUser) WebAuthnDisplayName() string                { return u.DisplayName }
 func (u *AdminUser) WebAuthnCredentials() []webauthn.Credential { return u.Credentials }
 
+// PasskeyConfig holds WebAuthn configuration.
+type PasskeyConfig struct {
+	RPDisplayName string
+	RPID          string
+	RPOrigins     []string
+	SessionKey    string
+}
+
 // NewPasskeyService creates a new Passkey + session service.
-func NewPasskeyService(cfg *config.AuthConfig) (*PasskeyService, error) {
+func NewPasskeyService(cfg *PasskeyConfig) (*PasskeyService, error) {
 	wconfig := &webauthn.Config{
 		RPDisplayName: cfg.RPDisplayName,
 		RPID:          cfg.RPID,

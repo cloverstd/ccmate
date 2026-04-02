@@ -7,35 +7,38 @@ import (
 	"sync"
 	"time"
 
+	"strconv"
+
 	"github.com/cloverstd/ccmate/internal/agentprovider"
-	"github.com/cloverstd/ccmate/internal/config"
 	"github.com/cloverstd/ccmate/internal/ent"
-	"github.com/cloverstd/ccmate/internal/ent/project"
 	enttask "github.com/cloverstd/ccmate/internal/ent/task"
 	"github.com/cloverstd/ccmate/internal/gitprovider"
 	"github.com/cloverstd/ccmate/internal/model"
 	"github.com/cloverstd/ccmate/internal/runner"
+	"github.com/cloverstd/ccmate/internal/settings"
 	"github.com/cloverstd/ccmate/internal/sse"
 )
 
 // Scheduler manages task scheduling, concurrency control, and lifecycle.
 type Scheduler struct {
 	client       *ent.Client
-	cfg          *config.Config
+	settingsMgr  *settings.Manager
 	broker       *sse.Broker
 	gitProvider  gitprovider.GitProvider
 	agentAdapter agentprovider.AgentAdapter
 
-	mu      sync.Mutex
-	running map[int]context.CancelFunc // taskID -> cancel function
+	mu             sync.Mutex
+	running        map[int]context.CancelFunc
+	runningHandles map[int]*agentprovider.SessionHandle
 }
 
-func New(client *ent.Client, cfg *config.Config, broker *sse.Broker) *Scheduler {
+func New(client *ent.Client, settingsMgr *settings.Manager, broker *sse.Broker) *Scheduler {
 	return &Scheduler{
-		client:  client,
-		cfg:     cfg,
-		broker:  broker,
-		running: make(map[int]context.CancelFunc),
+		client:         client,
+		settingsMgr:    settingsMgr,
+		broker:         broker,
+		running:        make(map[int]context.CancelFunc),
+		runningHandles: make(map[int]*agentprovider.SessionHandle),
 	}
 }
 
@@ -81,26 +84,20 @@ func (s *Scheduler) tick(ctx context.Context) {
 		return
 	}
 
+	// Global max concurrency
+	maxConcStr := s.settingsMgr.GetWithDefault(ctx, settings.KeyMaxConcurrency, "2")
+	maxConc, _ := strconv.Atoi(maxConcStr)
+	if maxConc <= 0 {
+		maxConc = 2
+	}
+
+	// Check global running count
+	globalRunning, _ := s.client.Task.Query().
+		Where(enttask.StatusEQ(enttask.StatusRunning)).Count(ctx)
+
 	for _, t := range tasks {
-		proj := t.Edges.Project
-		if proj == nil {
-			continue
-		}
-
-		// Check project concurrency
-		runningCount, err := s.client.Task.Query().
-			Where(
-				enttask.HasProjectWith(project.ID(proj.ID)),
-				enttask.StatusEQ(enttask.StatusRunning),
-			).
-			Count(ctx)
-		if err != nil {
-			slog.Error("failed to count running tasks", "error", err)
-			continue
-		}
-
-		if runningCount >= proj.MaxConcurrency {
-			continue
+		if globalRunning >= maxConc {
+			break
 		}
 
 		// Transition to running and start execution
@@ -112,13 +109,17 @@ func (s *Scheduler) tick(ctx context.Context) {
 
 		// Start task execution in background
 		s.startTask(ctx, t.ID)
+		globalRunning++
 	}
 }
 
 func (s *Scheduler) startTask(parentCtx context.Context, taskID int) {
+	timeoutMin, _ := strconv.Atoi(s.settingsMgr.GetWithDefault(parentCtx, settings.KeyTaskTimeoutMin, "60"))
+	if timeoutMin <= 0 {
+		timeoutMin = 60
+	}
 	s.mu.Lock()
-	taskCtx, cancel := context.WithTimeout(parentCtx,
-		time.Duration(s.cfg.Limits.TaskTimeoutMinutes)*time.Minute)
+	taskCtx, cancel := context.WithTimeout(parentCtx, time.Duration(timeoutMin)*time.Minute)
 	s.running[taskID] = cancel
 	s.mu.Unlock()
 
@@ -138,15 +139,24 @@ func (s *Scheduler) startTask(parentCtx context.Context, taskID int) {
 			return
 		}
 
-		r := runner.New(s.client, s.cfg, s.broker, s.gitProvider, s.agentAdapter)
+		r := runner.New(s.client, s.settingsMgr, s.broker, s.gitProvider, s.agentAdapter)
+		r.OnHandleReady = func(h *agentprovider.SessionHandle) {
+			s.mu.Lock()
+			s.runningHandles[taskID] = h
+			s.mu.Unlock()
+		}
 		if err := r.RunTask(taskCtx, taskID); err != nil {
 			slog.Error("task execution failed", "task_id", taskID, "error", err)
 		}
+		s.mu.Lock()
+		delete(s.runningHandles, taskID)
+		s.mu.Unlock()
 	}()
 }
 
 func (s *Scheduler) checkTimeouts(ctx context.Context) {
-	timeout := time.Duration(s.cfg.Limits.TaskTimeoutMinutes) * time.Minute
+	timeoutMin, _ := strconv.Atoi(s.settingsMgr.GetWithDefault(ctx, settings.KeyTaskTimeoutMin, "60"))
+	timeout := time.Duration(timeoutMin) * time.Minute
 	cutoff := time.Now().Add(-timeout)
 
 	tasks, err := s.client.Task.Query().
@@ -258,7 +268,71 @@ func (s *Scheduler) CancelTask(ctx context.Context, taskID int) error {
 	return err
 }
 
-// HandleUserInput processes user input for a waiting task.
+// ResumeWithMessage resumes a stopped task by starting a new agent session with --resume
+// and sending the user's message.
+func (s *Scheduler) ResumeWithMessage(ctx context.Context, taskID int, message string) error {
+	t, err := s.client.Task.Query().
+		Where(enttask.ID(taskID)).
+		WithProject().
+		WithSessions().
+		Only(ctx)
+	if err != nil {
+		return fmt.Errorf("loading task: %w", err)
+	}
+
+	// Find the last session's provider_session_key (claude session ID)
+	var sessionKey string
+	if sessions := t.Edges.Sessions; len(sessions) > 0 {
+		last := sessions[len(sessions)-1]
+		sessionKey = last.ProviderSessionKey
+	}
+
+	slog.Info("resuming task with message",
+		"task_id", taskID,
+		"session_key", sessionKey,
+		"message_len", len(message),
+	)
+
+	// Transition to queued (allow from any terminal/paused state)
+	currentStatus := model.TaskStatus(t.Status.String())
+	if currentStatus == model.TaskStatusPaused || currentStatus == model.TaskStatusFailed {
+		TransitionTask(ctx, s.client, taskID, currentStatus, model.TaskStatusQueued)
+	} else if currentStatus == model.TaskStatusSucceeded {
+		// For succeeded tasks, directly set to queued
+		_, _ = s.client.Task.UpdateOneID(taskID).SetStatus(enttask.StatusQueued).Save(ctx)
+	}
+
+	// Store the resume info so the runner can use it
+	// We use a convention: store message + session key in a pending user message
+	if t.CurrentSessionID != nil {
+		_, _ = s.client.SessionMessage.Create().
+			SetSessionID(*t.CurrentSessionID).
+			SetRole("user").
+			SetContentType("text").
+			SetContent(message).
+			Save(ctx)
+	}
+
+	// The scheduler tick will pick up the queued task and start it
+	// The runner will detect the session key and use --resume
+	return nil
+}
+
+// HandleUserInput forwards user input to the running agent.
 func (s *Scheduler) HandleUserInput(ctx context.Context, taskID int, event model.AgentEvent) error {
-	return TransitionTask(ctx, s.client, taskID, model.TaskStatusWaitingUser, model.TaskStatusRunning)
+	// Try to forward message to agent
+	s.mu.Lock()
+	handle, hasHandle := s.runningHandles[taskID]
+	s.mu.Unlock()
+
+	if hasHandle && s.agentAdapter != nil {
+		content, _ := event.Payload["content"].(string)
+		if content != "" {
+			if err := s.agentAdapter.SendInput(ctx, handle, agentprovider.UserInput{Text: content}); err != nil {
+				slog.Warn("failed to send input to agent", "task_id", taskID, "error", err)
+			}
+		}
+	}
+
+	return nil
 }

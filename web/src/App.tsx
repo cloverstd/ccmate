@@ -1,6 +1,8 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
+import SetupPage from './pages/SetupPage'
 import ProjectListPage from './pages/ProjectListPage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
 import TaskListPage from './pages/TaskListPage'
@@ -10,13 +12,25 @@ import { useAuth } from './hooks/useAuth'
 
 function App() {
   const { user, isAuthenticated, isLoading, logout } = useAuth()
+  const [initialized, setInitialized] = useState<boolean | null>(null)
 
-  if (isLoading) {
+  useEffect(() => {
+    fetch('/api/setup/status')
+      .then((r) => r.json())
+      .then((d) => setInitialized(d.initialized))
+      .catch(() => setInitialized(true)) // assume initialized on error
+  }, [])
+
+  if (initialized === null || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-gray-500">Loading...</div>
       </div>
     )
+  }
+
+  if (!initialized) {
+    return <SetupPage />
   }
 
   if (!isAuthenticated) {

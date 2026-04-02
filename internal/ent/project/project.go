@@ -24,8 +24,6 @@ const (
 	FieldDefaultBranch = "default_branch"
 	// FieldAutoMode holds the string denoting the auto_mode field in the database.
 	FieldAutoMode = "auto_mode"
-	// FieldMaxConcurrency holds the string denoting the max_concurrency field in the database.
-	FieldMaxConcurrency = "max_concurrency"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -60,7 +58,6 @@ var Columns = []string{
 	FieldGitProvider,
 	FieldDefaultBranch,
 	FieldAutoMode,
-	FieldMaxConcurrency,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
@@ -86,10 +83,6 @@ var (
 	DefaultDefaultBranch string
 	// DefaultAutoMode holds the default value on creation for the "auto_mode" field.
 	DefaultAutoMode bool
-	// DefaultMaxConcurrency holds the default value on creation for the "max_concurrency" field.
-	DefaultMaxConcurrency int
-	// MaxConcurrencyValidator is a validator for the "max_concurrency" field. It is called by the builders before save.
-	MaxConcurrencyValidator func(int) error
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -129,11 +122,6 @@ func ByDefaultBranch(opts ...sql.OrderTermOption) OrderOption {
 // ByAutoMode orders the results by the auto_mode field.
 func ByAutoMode(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAutoMode, opts...).ToFunc()
-}
-
-// ByMaxConcurrency orders the results by the max_concurrency field.
-func ByMaxConcurrency(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldMaxConcurrency, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

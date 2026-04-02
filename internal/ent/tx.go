@@ -34,6 +34,8 @@ type Tx struct {
 	SessionEvent *SessionEventClient
 	// SessionMessage is the client for interacting with the SessionMessage builders.
 	SessionMessage *SessionMessageClient
+	// SystemSetting is the client for interacting with the SystemSetting builders.
+	SystemSetting *SystemSettingClient
 	// Task is the client for interacting with the Task builders.
 	Task *TaskClient
 	// WebhookReceipt is the client for interacting with the WebhookReceipt builders.
@@ -180,6 +182,7 @@ func (tx *Tx) init() {
 	tx.Session = NewSessionClient(tx.config)
 	tx.SessionEvent = NewSessionEventClient(tx.config)
 	tx.SessionMessage = NewSessionMessageClient(tx.config)
+	tx.SystemSetting = NewSystemSettingClient(tx.config)
 	tx.Task = NewTaskClient(tx.config)
 	tx.WebhookReceipt = NewWebhookReceiptClient(tx.config)
 }

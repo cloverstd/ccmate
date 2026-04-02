@@ -17,6 +17,7 @@ import (
 	"github.com/cloverstd/ccmate/internal/ent/session"
 	"github.com/cloverstd/ccmate/internal/ent/sessionevent"
 	"github.com/cloverstd/ccmate/internal/ent/sessionmessage"
+	"github.com/cloverstd/ccmate/internal/ent/systemsetting"
 	"github.com/cloverstd/ccmate/internal/ent/task"
 	"github.com/cloverstd/ccmate/internal/ent/webhookreceipt"
 )
@@ -137,18 +138,12 @@ func init() {
 	projectDescAutoMode := projectFields[4].Descriptor()
 	// project.DefaultAutoMode holds the default value on creation for the auto_mode field.
 	project.DefaultAutoMode = projectDescAutoMode.Default.(bool)
-	// projectDescMaxConcurrency is the schema descriptor for max_concurrency field.
-	projectDescMaxConcurrency := projectFields[5].Descriptor()
-	// project.DefaultMaxConcurrency holds the default value on creation for the max_concurrency field.
-	project.DefaultMaxConcurrency = projectDescMaxConcurrency.Default.(int)
-	// project.MaxConcurrencyValidator is a validator for the "max_concurrency" field. It is called by the builders before save.
-	project.MaxConcurrencyValidator = projectDescMaxConcurrency.Validators[0].(func(int) error)
 	// projectDescCreatedAt is the schema descriptor for created_at field.
-	projectDescCreatedAt := projectFields[6].Descriptor()
+	projectDescCreatedAt := projectFields[5].Descriptor()
 	// project.DefaultCreatedAt holds the default value on creation for the created_at field.
 	project.DefaultCreatedAt = projectDescCreatedAt.Default.(func() time.Time)
 	// projectDescUpdatedAt is the schema descriptor for updated_at field.
-	projectDescUpdatedAt := projectFields[7].Descriptor()
+	projectDescUpdatedAt := projectFields[6].Descriptor()
 	// project.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	project.DefaultUpdatedAt = projectDescUpdatedAt.Default.(func() time.Time)
 	// project.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
@@ -243,6 +238,22 @@ func init() {
 	sessionmessageDescCreatedAt := sessionmessageFields[4].Descriptor()
 	// sessionmessage.DefaultCreatedAt holds the default value on creation for the created_at field.
 	sessionmessage.DefaultCreatedAt = sessionmessageDescCreatedAt.Default.(func() time.Time)
+	systemsettingFields := schema.SystemSetting{}.Fields()
+	_ = systemsettingFields
+	// systemsettingDescKey is the schema descriptor for key field.
+	systemsettingDescKey := systemsettingFields[0].Descriptor()
+	// systemsetting.KeyValidator is a validator for the "key" field. It is called by the builders before save.
+	systemsetting.KeyValidator = systemsettingDescKey.Validators[0].(func(string) error)
+	// systemsettingDescValue is the schema descriptor for value field.
+	systemsettingDescValue := systemsettingFields[1].Descriptor()
+	// systemsetting.DefaultValue holds the default value on creation for the value field.
+	systemsetting.DefaultValue = systemsettingDescValue.Default.(string)
+	// systemsettingDescUpdatedAt is the schema descriptor for updated_at field.
+	systemsettingDescUpdatedAt := systemsettingFields[2].Descriptor()
+	// systemsetting.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	systemsetting.DefaultUpdatedAt = systemsettingDescUpdatedAt.Default.(func() time.Time)
+	// systemsetting.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	systemsetting.UpdateDefaultUpdatedAt = systemsettingDescUpdatedAt.UpdateDefault.(func() time.Time)
 	taskFields := schema.Task{}.Fields()
 	_ = taskFields
 	// taskDescPriority is the schema descriptor for priority field.

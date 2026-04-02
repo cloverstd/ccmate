@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/cloverstd/ccmate/internal/agentprovider"
-	"github.com/cloverstd/ccmate/internal/config"
 	"github.com/cloverstd/ccmate/internal/ent"
 	"github.com/cloverstd/ccmate/internal/ent/project"
 	"github.com/cloverstd/ccmate/internal/ent/projectlabelrule"
@@ -24,23 +23,28 @@ import (
 	"github.com/cloverstd/ccmate/internal/model"
 	"github.com/cloverstd/ccmate/internal/prompt"
 	"github.com/cloverstd/ccmate/internal/sanitize"
+	"github.com/cloverstd/ccmate/internal/settings"
 	"github.com/cloverstd/ccmate/internal/sse"
 )
 
 // Runner manages the execution of a single task.
 type Runner struct {
 	client       *ent.Client
-	cfg          *config.Config
+	settingsMgr  *settings.Manager
 	broker       *sse.Broker
 	gitProvider  gitprovider.GitProvider
 	agentAdapter agentprovider.AgentAdapter
+
+	// OnHandleReady is called when the agent session handle is ready, allowing
+	// the scheduler to forward user input to the agent.
+	OnHandleReady func(h *agentprovider.SessionHandle)
 }
 
 func New(
-	client *ent.Client, cfg *config.Config, broker *sse.Broker,
+	client *ent.Client, settingsMgr *settings.Manager, broker *sse.Broker,
 	gitProvider gitprovider.GitProvider, agentAdapter agentprovider.AgentAdapter,
 ) *Runner {
-	return &Runner{client: client, cfg: cfg, broker: broker, gitProvider: gitProvider, agentAdapter: agentAdapter}
+	return &Runner{client: client, settingsMgr: settingsMgr, broker: broker, gitProvider: gitProvider, agentAdapter: agentAdapter}
 }
 
 // RunTask executes a task end-to-end.
@@ -55,85 +59,175 @@ func (r *Runner) RunTask(ctx context.Context, taskID int) error {
 		return fmt.Errorf("task has no project")
 	}
 
-	slog.Info("starting task execution", "task_id", taskID, "project", proj.Name, "issue", t.IssueNumber)
+	debug := r.settingsMgr.GetWithDefault(ctx, settings.KeyDebugMode, "false") == "true"
+	topic := fmt.Sprintf("task:%d", taskID)
 
-	ws := NewWorkspace(r.cfg.Storage.WorkspacesDir, proj.ID, taskID)
-	if err := ws.Prepare(); err != nil {
-		return fmt.Errorf("preparing workspace: %w", err)
-	}
-
-	repo := parseRepoURL(proj.RepoURL)
-
-	// Clone with temporary credentials
-	if err := r.cloneWithCredentials(ctx, repo, ws.RepoPath, proj.DefaultBranch); err != nil {
-		return r.failTask(ctx, taskID, fmt.Errorf("cloning repo: %w", err))
-	}
-
-	branchName := ws.BranchName(t.IssueNumber)
-	if err := ws.GitCheckoutBranch(ctx, branchName); err != nil {
-		return r.failTask(ctx, taskID, fmt.Errorf("creating branch: %w", err))
-	}
-
-	issue, err := r.gitProvider.GetIssue(ctx, repo, t.IssueNumber)
-	if err != nil {
-		return r.failTask(ctx, taskID, fmt.Errorf("getting issue: %w", err))
-	}
-
-	comments, _ := r.gitProvider.ListIssueComments(ctx, repo, t.IssueNumber)
-
-	// Load project-level PromptTemplate via label rule
-	builder := prompt.NewBuilder()
-	r.loadProjectPromptTemplate(ctx, proj, builder)
-
-	// For review_fix tasks, load prior session context
-	systemPrompt := builder.BuildSystemPrompt()
-	var taskPrompt string
-
-	if t.Type == enttask.TypeReviewFix && t.PrNumber != nil {
-		reviews, _ := r.gitProvider.ListPullRequestReviews(ctx, repo, *t.PrNumber)
-		diff, _ := r.gitProvider.GetPullRequestDiff(ctx, repo, *t.PrNumber)
-
-		priorHistory := r.loadPriorSessionHistory(ctx, t)
-		if priorHistory != "" {
-			systemPrompt += "\n## Prior Session Context\n" + priorHistory
-		}
-
-		taskPrompt = builder.BuildReviewFixPrompt(issue, reviews, diff)
-	} else {
-		taskPrompt = builder.BuildTaskPrompt(issue, comments, t.Type.String())
-	}
-
-	// Save prompt snapshot with actual model info
-	modelName, modelVersion := r.resolveModelInfo()
-	_, _ = r.client.PromptTemplateSnapshot.Create().
-		SetTask(t).SetSystemPrompt(systemPrompt).SetTaskPrompt(taskPrompt).
-		SetModelName(modelName).SetModelVersion(modelVersion).Save(ctx)
-
+	// Create session early so we can log steps into it
 	sess, err := r.client.Session.Create().
 		SetTask(t).SetStatus(session.StatusStreaming).SetStartedAt(time.Now()).Save(ctx)
 	if err != nil {
 		return r.failTask(ctx, taskID, fmt.Errorf("creating session: %w", err))
 	}
-
 	_, _ = r.client.Task.UpdateOneID(taskID).SetCurrentSessionID(sess.ID).Save(ctx)
 
+	sequence := 0
+	logStep := func(step string, detail string) {
+		sequence++
+		payload := map[string]interface{}{"step": step, "detail": detail}
+		payloadJSON, _ := json.Marshal(payload)
+		_, _ = r.client.SessionEvent.Create().
+			SetSession(sess).SetEventType("run.step").
+			SetPayloadJSON(string(payloadJSON)).SetSequence(sequence).Save(ctx)
+		r.broker.Publish(topic, sse.Event{Type: "run.step", Data: payload})
+		slog.Info("task step", "task_id", taskID, "step", step, "detail", detail)
+	}
+
+	// Check for existing session to resume
+	var resumeSessionID string
+	existingSessions, _ := r.client.Session.Query().
+		Where(session.HasTaskWith(enttask.ID(taskID))).
+		All(ctx)
+	for _, es := range existingSessions {
+		if es.ProviderSessionKey != "" {
+			resumeSessionID = es.ProviderSessionKey
+		}
+	}
+
+	isResume := resumeSessionID != ""
+
+	wsDir := r.settingsMgr.GetWithDefault(ctx, settings.KeyStorageBasePath, "data")
+	ws := NewWorkspace(filepath.Join(wsDir, "workspaces"), proj.ID, taskID)
+	repo := parseRepoURL(proj.RepoURL)
+	branchName := ws.BranchName(t.IssueNumber)
+
+	var systemPrompt, taskPrompt string
+	modelName, modelVersion := r.resolveModelInfo(ctx)
+
+	if isResume {
+		// === RESUME MODE ===
+		logStep("resume", fmt.Sprintf("Resuming task #%d, claude session %s", taskID, resumeSessionID))
+
+		// Workspace should already exist — just make sure
+		ws.Prepare()
+
+		// Find the latest user message as the prompt to send
+		lastUserMsgs, _ := r.client.SessionMessage.Query().
+			Where(
+				sessionmessage.HasSessionWith(session.HasTaskWith(enttask.ID(taskID))),
+				sessionmessage.Role("user"),
+			).
+			Order(ent.Desc(sessionmessage.FieldSequence)).
+			Limit(1).
+			All(ctx)
+
+		if len(lastUserMsgs) > 0 {
+			taskPrompt = lastUserMsgs[0].Content
+			logStep("resume_message", taskPrompt)
+		} else {
+			taskPrompt = "Please continue."
+		}
+
+		// System prompt stays the same
+		builder := prompt.NewBuilder()
+		r.loadProjectPromptTemplate(ctx, proj, builder)
+		systemPrompt = builder.BuildSystemPrompt()
+
+	} else {
+		// === FRESH START MODE ===
+		logStep("init", fmt.Sprintf("Starting task #%d for project %s, issue #%d", taskID, proj.Name, t.IssueNumber))
+
+		logStep("workspace", fmt.Sprintf("Preparing workspace at %s", ws.RepoPath))
+		if err := ws.Prepare(); err != nil {
+			return r.failTask(ctx, taskID, fmt.Errorf("preparing workspace: %w", err))
+		}
+
+		logStep("clone", fmt.Sprintf("Cloning %s (branch: %s)", proj.RepoURL, proj.DefaultBranch))
+		if err := r.cloneWithCredentials(ctx, repo, ws.RepoPath, proj.DefaultBranch); err != nil {
+			return r.failTask(ctx, taskID, fmt.Errorf("cloning repo: %w", err))
+		}
+
+		logStep("branch", fmt.Sprintf("Creating branch %s", branchName))
+		if err := ws.GitCheckoutBranch(ctx, branchName); err != nil {
+			return r.failTask(ctx, taskID, fmt.Errorf("creating branch: %w", err))
+		}
+
+		logStep("fetch_issue", fmt.Sprintf("Fetching issue #%d from GitHub", t.IssueNumber))
+		issue, err := r.gitProvider.GetIssue(ctx, repo, t.IssueNumber)
+		if err != nil {
+			return r.failTask(ctx, taskID, fmt.Errorf("getting issue: %w", err))
+		}
+		logStep("issue_loaded", fmt.Sprintf("Issue: %s", issue.Title))
+
+		comments, _ := r.gitProvider.ListIssueComments(ctx, repo, t.IssueNumber)
+		if len(comments) > 0 {
+			logStep("comments", fmt.Sprintf("Loaded %d comments", len(comments)))
+		}
+
+		builder := prompt.NewBuilder()
+		r.loadProjectPromptTemplate(ctx, proj, builder)
+		systemPrompt = builder.BuildSystemPrompt()
+
+		if t.Type == enttask.TypeReviewFix && t.PrNumber != nil {
+			reviews, _ := r.gitProvider.ListPullRequestReviews(ctx, repo, *t.PrNumber)
+			diff, _ := r.gitProvider.GetPullRequestDiff(ctx, repo, *t.PrNumber)
+			priorHistory := r.loadPriorSessionHistory(ctx, t)
+			if priorHistory != "" {
+				systemPrompt += "\n## Prior Session Context\n" + priorHistory
+			}
+			taskPrompt = builder.BuildReviewFixPrompt(issue, reviews, diff)
+			logStep("prompt", fmt.Sprintf("Built review fix prompt (system: %d, task: %d)", len(systemPrompt), len(taskPrompt)))
+		} else {
+			taskPrompt = builder.BuildTaskPrompt(issue, comments, t.Type.String())
+			logStep("prompt", fmt.Sprintf("Built task prompt (system: %d, task: %d)", len(systemPrompt), len(taskPrompt)))
+		}
+	}
+
+	if debug {
+		logStep("debug_system_prompt", systemPrompt)
+		logStep("debug_task_prompt", taskPrompt)
+	}
+
+	_, _ = r.client.PromptTemplateSnapshot.Create().
+		SetTask(t).SetSystemPrompt(systemPrompt).SetTaskPrompt(taskPrompt).
+		SetModelName(modelName).SetModelVersion(modelVersion).Save(ctx)
+
+	logStep("agent_start", fmt.Sprintf("Starting agent (resume=%v, model=%s)", isResume, modelName))
 	handle, err := r.agentAdapter.StartSession(ctx, agentprovider.StartSessionRequest{
 		WorkDir: ws.RepoPath, SystemPrompt: systemPrompt, TaskPrompt: taskPrompt,
+		ResumeSessionID: resumeSessionID,
 	})
 	if err != nil {
 		return r.failTask(ctx, taskID, fmt.Errorf("starting agent: %w", err))
 	}
 	defer r.agentAdapter.Close(ctx, handle)
 
+	// Register handle for user input forwarding
+	if r.OnHandleReady != nil {
+		r.OnHandleReady(handle)
+	}
+
+	// Log debug info from the agent adapter (command line, args, env, etc.)
+	if handle.DebugInfo != nil {
+		for k, v := range handle.DebugInfo {
+			logStep("debug_"+k, v)
+		}
+	}
+	if debug {
+		caps := r.agentAdapter.Capabilities()
+		logStep("debug_agent_caps", fmt.Sprintf("image=%v, resume=%v, streaming=%v",
+			caps.SupportsImage, caps.SupportsResume, caps.SupportsStreaming))
+	}
+
+	logStep("agent_streaming", "Starting event stream from agent")
 	eventCh, err := r.agentAdapter.StreamEvents(ctx, handle)
 	if err != nil {
 		return r.failTask(ctx, taskID, fmt.Errorf("streaming events: %w", err))
 	}
 
-	topic := fmt.Sprintf("task:%d", taskID)
-	sequence := 0
 	totalLogBytes := int64(0)
-	maxLogBytes := int64(r.cfg.Limits.MaxLogSizeMB) * 1024 * 1024
+	maxLogMB, _ := strconv.Atoi(r.settingsMgr.GetWithDefault(ctx, settings.KeyMaxLogSizeMB, "50"))
+	maxLogBytes := int64(maxLogMB) * 1024 * 1024
+	var agentErrors []string
 
 	for event := range eventCh {
 		sequence++
@@ -152,14 +246,52 @@ func (r *Runner) RunTask(ctx context.Context, taskID int) error {
 			SetSession(sess).SetEventType(string(event.Type)).
 			SetPayloadJSON(string(payloadJSON)).SetSequence(sequence).Save(ctx)
 
-		if event.Type == model.AgentEventMessageCompleted {
+		// Capture claude session ID for resume
+		if event.Type == model.AgentEventRunStatus {
+			if sid, ok := event.Payload["session_id"].(string); ok && sid != "" {
+				_, _ = r.client.Session.UpdateOne(sess).SetProviderSessionKey(sid).Save(ctx)
+				logStep("session_id", sid)
+			}
+		}
+
+		// Save all meaningful events as messages for history replay
+		switch event.Type {
+		case model.AgentEventMessageDelta:
 			content, _ := sanitizedPayload["content"].(string)
+			if content != "" {
+				_, _ = r.client.SessionMessage.Create().
+					SetSession(sess).SetRole("assistant").SetContentType("text").
+					SetContent(content).SetSequence(sequence).Save(ctx)
+			}
+		case model.AgentEventMessageCompleted:
+			content, _ := sanitizedPayload["content"].(string)
+			if content != "" {
+				_, _ = r.client.SessionMessage.Create().
+					SetSession(sess).SetRole("assistant").SetContentType("result").
+					SetContent(content).SetSequence(sequence).Save(ctx)
+			}
+		case model.AgentEventToolCall:
+			toolJSON, _ := json.Marshal(sanitizedPayload)
 			_, _ = r.client.SessionMessage.Create().
-				SetSession(sess).SetRole("assistant").SetContentType("text").
-				SetContent(content).SetSequence(sequence).Save(ctx)
+				SetSession(sess).SetRole("assistant").SetContentType("tool_call").
+				SetContent(string(toolJSON)).SetSequence(sequence).Save(ctx)
+		case model.AgentEventToolResult:
+			resultJSON, _ := json.Marshal(sanitizedPayload)
+			_, _ = r.client.SessionMessage.Create().
+				SetSession(sess).SetRole("tool").SetContentType("tool_result").
+				SetContent(string(resultJSON)).SetSequence(sequence).Save(ctx)
 		}
 
 		r.broker.Publish(topic, sse.Event{Type: string(event.Type), Data: sanitizedPayload})
+
+		// Track errors from agent
+		if event.Type == model.AgentEventError {
+			errMsg, _ := event.Payload["message"].(string)
+			if errMsg != "" {
+				agentErrors = append(agentErrors, errMsg)
+				logStep("agent_error", errMsg)
+			}
+		}
 
 		if event.Type == model.AgentEventRunStatus {
 			if status, ok := event.Payload["status"].(string); ok && status == "completed" {
@@ -168,30 +300,47 @@ func (r *Runner) RunTask(ctx context.Context, taskID int) error {
 		}
 	}
 
+	// If agent had errors, fail the task
+	if len(agentErrors) > 0 {
+		return r.failTask(ctx, taskID, fmt.Errorf("agent error: %s", strings.Join(agentErrors, "; ")))
+	}
+
+	logStep("agent_done", "Agent execution completed")
+
 	now := time.Now()
 	_, _ = r.client.Session.UpdateOne(sess).SetStatus(session.StatusClosed).SetEndedAt(now).Save(ctx)
 
-	// Clean up git credentials
 	r.cleanupCredentials(ws.RepoPath)
 
+	logStep("check_diff", "Checking for code changes")
 	diff, _ := ws.GitDiff(ctx)
 	if diff != "" {
+		logStep("git_add", "Staging changes")
 		if err := ws.GitAdd(ctx); err != nil {
 			return r.failTask(ctx, taskID, fmt.Errorf("staging changes: %w", err))
 		}
 
 		commitMsg := fmt.Sprintf("ccmate: implement changes for issue #%d", t.IssueNumber)
+		logStep("git_commit", fmt.Sprintf("Committing: %s", commitMsg))
 		if err := ws.GitCommit(ctx, commitMsg); err != nil {
 			return r.failTask(ctx, taskID, fmt.Errorf("committing: %w", err))
 		}
 
+		logStep("git_push", fmt.Sprintf("Pushing branch %s", branchName))
 		if err := r.gitProvider.PushBranch(ctx, repo, ws.RepoPath, branchName); err != nil {
 			return r.failTask(ctx, taskID, fmt.Errorf("pushing: %w", err))
 		}
 
 		if t.PrNumber == nil {
+			// Fetch issue title for PR
+			issueForPR, _ := r.gitProvider.GetIssue(ctx, repo, t.IssueNumber)
+			prTitle := fmt.Sprintf("Fix #%d", t.IssueNumber)
+			if issueForPR != nil {
+				prTitle = fmt.Sprintf("Fix #%d: %s", t.IssueNumber, issueForPR.Title)
+			}
+			logStep("create_pr", fmt.Sprintf("Creating PR: %s", prTitle))
 			pr, err := r.gitProvider.CreatePullRequest(ctx, repo, model.CreatePRRequest{
-				Title: fmt.Sprintf("Fix #%d: %s", t.IssueNumber, issue.Title),
+				Title: prTitle,
 				Body:  fmt.Sprintf("Automated implementation for issue #%d\n\nGenerated by ccmate", t.IssueNumber),
 				Head:  branchName, Base: proj.DefaultBranch,
 			})
@@ -200,8 +349,10 @@ func (r *Runner) RunTask(ctx context.Context, taskID int) error {
 			}
 			_, _ = r.client.Task.UpdateOneID(taskID).SetPrNumber(pr.Number).Save(ctx)
 			_ = r.gitProvider.CreateIssueComment(ctx, repo, t.IssueNumber, fmt.Sprintf("PR created: %s", pr.HTMLURL))
-			slog.Info("PR created", "pr", pr.Number, "url", pr.HTMLURL)
+			logStep("pr_created", fmt.Sprintf("PR #%d created: %s", pr.Number, pr.HTMLURL))
 		}
+	} else {
+		logStep("no_changes", "No code changes detected")
 	}
 
 	_, err = r.client.Task.UpdateOneID(taskID).SetStatus(enttask.StatusSucceeded).Save(ctx)
@@ -262,14 +413,13 @@ func (r *Runner) loadProjectPromptTemplate(ctx context.Context, proj *ent.Projec
 }
 
 // resolveModelInfo returns the model name and version from the configured agent provider.
-func (r *Runner) resolveModelInfo() (string, string) {
-	caps := r.agentAdapter.Capabilities()
-	// Use capability info to identify the provider type
-	_ = caps
-	// Return from config if available
-	if len(r.cfg.Agent.Providers) > 0 {
-		p := r.cfg.Agent.Providers[0]
-		return p.Name, p.Binary
+func (r *Runner) resolveModelInfo(ctx context.Context) (string, string) {
+	provJSON := r.settingsMgr.GetWithDefault(ctx, settings.KeyAgentProviders, "")
+	if provJSON != "" {
+		var providers []map[string]string
+		if err := json.Unmarshal([]byte(provJSON), &providers); err == nil && len(providers) > 0 {
+			return providers[0]["name"], providers[0]["binary"]
+		}
 	}
 	return "unknown", ""
 }

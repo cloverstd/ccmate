@@ -336,6 +336,112 @@ func (p *Provider) CloneRepo(ctx context.Context, repo model.RepoRef, destPath s
 	return nil
 }
 
+func (p *Provider) ListRepoIssues(ctx context.Context, repo model.RepoRef) ([]model.Issue, error) {
+	issues, _, err := p.client.Issues.ListByRepo(ctx, repo.Owner, repo.Name, &gh.IssueListByRepoOptions{
+		State: "open", ListOptions: gh.ListOptions{PerPage: 30},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing issues: %w", err)
+	}
+	var result []model.Issue
+	for _, issue := range issues {
+		if issue.PullRequestLinks != nil {
+			continue // skip PRs (GitHub API returns PRs as issues too)
+		}
+		labels := make([]string, len(issue.Labels))
+		for i, l := range issue.Labels {
+			labels[i] = l.GetName()
+		}
+		result = append(result, model.Issue{
+			Number: issue.GetNumber(), Title: issue.GetTitle(), Body: issue.GetBody(),
+			Labels: labels, State: issue.GetState(), User: issue.GetUser().GetLogin(),
+		})
+	}
+	return result, nil
+}
+
+func (p *Provider) ListRepoPRs(ctx context.Context, repo model.RepoRef) ([]model.PullRequest, error) {
+	prs, _, err := p.client.PullRequests.List(ctx, repo.Owner, repo.Name, &gh.PullRequestListOptions{
+		State: "open", ListOptions: gh.ListOptions{PerPage: 30},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing PRs: %w", err)
+	}
+	result := make([]model.PullRequest, len(prs))
+	for i, pr := range prs {
+		result[i] = model.PullRequest{
+			Number: pr.GetNumber(), Title: pr.GetTitle(), Body: pr.GetBody(),
+			State: pr.GetState(), HTMLURL: pr.GetHTMLURL(),
+			Head: pr.GetHead().GetRef(), Base: pr.GetBase().GetRef(),
+		}
+	}
+	return result, nil
+}
+
+func (p *Provider) CreateIssue(ctx context.Context, repo model.RepoRef, title string, body string, labels []string) (*model.Issue, error) {
+	issue, _, err := p.client.Issues.Create(ctx, repo.Owner, repo.Name, &gh.IssueRequest{
+		Title:  &title,
+		Body:   &body,
+		Labels: &labels,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("creating issue: %w", err)
+	}
+	issueLabels := make([]string, len(issue.Labels))
+	for i, l := range issue.Labels {
+		issueLabels[i] = l.GetName()
+	}
+	return &model.Issue{
+		Number: issue.GetNumber(), Title: issue.GetTitle(), Body: issue.GetBody(),
+		Labels: issueLabels, State: issue.GetState(), User: issue.GetUser().GetLogin(),
+	}, nil
+}
+
+func (p *Provider) ListAccessibleRepos(ctx context.Context) ([]model.RepoInfo, error) {
+	var allRepos []model.RepoInfo
+	opts := &gh.RepositoryListOptions{
+		Sort:        "updated",
+		ListOptions: gh.ListOptions{PerPage: 100},
+	}
+
+	repos, _, err := p.client.Repositories.List(ctx, "", opts)
+	if err != nil {
+		return nil, fmt.Errorf("listing repos: %w", err)
+	}
+
+	for _, repo := range repos {
+		allRepos = append(allRepos, model.RepoInfo{
+			FullName:      repo.GetFullName(),
+			HTMLURL:       repo.GetHTMLURL(),
+			DefaultBranch: repo.GetDefaultBranch(),
+			Description:   repo.GetDescription(),
+			Private:       repo.GetPrivate(),
+		})
+	}
+	return allRepos, nil
+}
+
+func (p *Provider) CloseIssue(ctx context.Context, repo model.RepoRef, issueNumber int) error {
+	state := "closed"
+	_, _, err := p.client.Issues.Edit(ctx, repo.Owner, repo.Name, issueNumber, &gh.IssueRequest{
+		State: &state,
+	})
+	if err != nil {
+		return fmt.Errorf("closing issue: %w", err)
+	}
+	return nil
+}
+
+func (p *Provider) MergePullRequest(ctx context.Context, repo model.RepoRef, prNumber int) error {
+	_, _, err := p.client.PullRequests.Merge(ctx, repo.Owner, repo.Name, prNumber, "", &gh.PullRequestOptions{
+		MergeMethod: "squash",
+	})
+	if err != nil {
+		return fmt.Errorf("merging PR: %w", err)
+	}
+	return nil
+}
+
 func verifySignature(body []byte, signature string, secret string) bool {
 	if !strings.HasPrefix(signature, "sha256=") {
 		return false

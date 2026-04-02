@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -14,22 +15,26 @@ import (
 	"github.com/cloverstd/ccmate/internal/ent"
 	"github.com/cloverstd/ccmate/internal/ent/project"
 	enttask "github.com/cloverstd/ccmate/internal/ent/task"
+	"github.com/cloverstd/ccmate/internal/gitprovider"
 	"github.com/cloverstd/ccmate/internal/model"
 	"github.com/cloverstd/ccmate/internal/scheduler"
+	"github.com/cloverstd/ccmate/internal/settings"
 	"github.com/cloverstd/ccmate/internal/sse"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
 type TaskHandler struct {
-	client *ent.Client
-	cfg    *config.Config
-	broker *sse.Broker
-	sched  *scheduler.Scheduler
+	client      *ent.Client
+	cfg         *config.Config
+	broker      *sse.Broker
+	sched       *scheduler.Scheduler
+	gitProv     gitprovider.GitProvider
+	settingsMgr *settings.Manager
 }
 
-func NewTaskHandler(client *ent.Client, cfg *config.Config, broker *sse.Broker, sched *scheduler.Scheduler) *TaskHandler {
-	return &TaskHandler{client: client, cfg: cfg, broker: broker, sched: sched}
+func NewTaskHandler(client *ent.Client, cfg *config.Config, broker *sse.Broker, sched *scheduler.Scheduler, gitProv gitprovider.GitProvider, settingsMgr *settings.Manager) *TaskHandler {
+	return &TaskHandler{client: client, cfg: cfg, broker: broker, sched: sched, gitProv: gitProv, settingsMgr: settingsMgr}
 }
 
 func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -121,6 +126,79 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, t)
 }
 
+type CreateFromPromptRequest struct {
+	ProjectID int      `json:"project_id"`
+	Title     string   `json:"title"`
+	Body      string   `json:"body"`
+	Labels    []string `json:"labels"`
+}
+
+// CreateFromPrompt creates a GitHub issue from the prompt, then creates a task for it.
+func (h *TaskHandler) CreateFromPrompt(w http.ResponseWriter, r *http.Request) {
+	var req CreateFromPromptRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.ProjectID == 0 || req.Title == "" || req.Body == "" {
+		http.Error(w, `{"error":"project_id, title and body are required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if h.gitProv == nil {
+		http.Error(w, `{"error":"git provider not configured"}`, http.StatusInternalServerError)
+		return
+	}
+
+	proj, err := h.client.Project.Get(r.Context(), req.ProjectID)
+	if err != nil {
+		http.Error(w, `{"error":"project not found"}`, http.StatusNotFound)
+		return
+	}
+
+	repo := parseRepoURLFromString(proj.RepoURL)
+
+	// Create issue on GitHub
+	issue, err := h.gitProv.CreateIssue(r.Context(), repo, req.Title, req.Body, req.Labels)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"failed to create issue: %s"}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	// Create task for the new issue
+	t, err := h.client.Task.Create().
+		SetProject(proj).
+		SetIssueNumber(issue.Number).
+		SetType(enttask.TypeIssueImplementation).
+		SetStatus(enttask.StatusQueued).
+		SetTriggerSource(string(model.TriggerSourceWeb)).
+		Save(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"failed to create task"}`, http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]interface{}{
+		"issue":  issue,
+		"task":   t,
+	})
+}
+
+func parseRepoURLFromString(url string) model.RepoRef {
+	for _, sep := range []string{"github.com/", "gitlab.com/", "gitee.com/"} {
+		if i := strings.Index(url, sep); i >= 0 {
+			rest := url[i+len(sep):]
+			rest = strings.TrimSuffix(rest, ".git")
+			parts := strings.SplitN(rest, "/", 2)
+			if len(parts) == 2 {
+				return model.RepoRef{Owner: parts[0], Name: parts[1]}
+			}
+		}
+	}
+	return model.RepoRef{}
+}
+
 func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
@@ -131,7 +209,10 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 	t, err := h.client.Task.Query().
 		Where(enttask.ID(id)).
 		WithProject().
-		WithSessions().
+		WithSessions(func(q *ent.SessionQuery) {
+			q.WithMessages()
+			q.WithEvents()
+		}).
 		Only(r.Context())
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -142,7 +223,17 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, t)
+	// Build response with extra fields
+	basePath := h.settingsMgr.GetWithDefault(r.Context(), settings.KeyStorageBasePath, "data")
+	var workspacePath string
+	if t.Edges.Project != nil {
+		workspacePath = filepath.Join(basePath, "workspaces", fmt.Sprintf("%d", t.Edges.Project.ID), fmt.Sprintf("%d", t.ID), "repo")
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"task":           t,
+		"workspace_path": workspacePath,
+	})
 }
 
 func (h *TaskHandler) Pause(w http.ResponseWriter, r *http.Request) {
@@ -179,6 +270,52 @@ func (h *TaskHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// Complete marks a task as done, closes the issue, and merges the PR if exists.
+func (h *TaskHandler) Complete(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
+
+	t, err := h.client.Task.Query().
+		Where(enttask.ID(id)).WithProject().Only(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"task not found"}`, http.StatusNotFound)
+		return
+	}
+
+	proj := t.Edges.Project
+	if proj == nil || h.gitProv == nil {
+		http.Error(w, `{"error":"project or git provider not available"}`, http.StatusBadRequest)
+		return
+	}
+
+	repo := parseRepoURLFromString(proj.RepoURL)
+	ctx := r.Context()
+	var actions []string
+
+	// 1. Merge PR if exists
+	if t.PrNumber != nil && *t.PrNumber > 0 {
+		if err := h.gitProv.MergePullRequest(ctx, repo, *t.PrNumber); err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":"failed to merge PR #%d: %s"}`, *t.PrNumber, err.Error()), http.StatusInternalServerError)
+			return
+		}
+		actions = append(actions, fmt.Sprintf("PR #%d merged", *t.PrNumber))
+	}
+
+	// 2. Close issue
+	if err := h.gitProv.CloseIssue(ctx, repo, t.IssueNumber); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"failed to close issue #%d: %s"}`, t.IssueNumber, err.Error()), http.StatusInternalServerError)
+		return
+	}
+	actions = append(actions, fmt.Sprintf("Issue #%d closed", t.IssueNumber))
+
+	// 3. Mark task as succeeded
+	_, _ = h.client.Task.UpdateOneID(id).SetStatus(enttask.StatusSucceeded).Save(ctx)
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":  "completed",
+		"actions": actions,
+	})
 }
 
 type SendMessageRequest struct {
@@ -227,11 +364,17 @@ func (h *TaskHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		Data: msg,
 	})
 
-	if t.Status == enttask.StatusWaitingUser {
+	// Forward message to running agent, or resume if not running
+	if t.Status == enttask.StatusWaitingUser || t.Status == enttask.StatusRunning {
 		_ = h.sched.HandleUserInput(r.Context(), id, model.AgentEvent{
 			Type:    model.AgentEventMessageDelta,
 			Payload: map[string]interface{}{"content": req.Content},
 		})
+	} else if t.Status == enttask.StatusPaused || t.Status == enttask.StatusFailed || t.Status == enttask.StatusSucceeded {
+		// Resume the task with the new message
+		if err := h.sched.ResumeWithMessage(r.Context(), id, req.Content); err != nil {
+			slog.Warn("failed to resume task with message", "task_id", id, "error", err)
+		}
 	}
 
 	writeJSON(w, http.StatusCreated, msg)
@@ -245,7 +388,8 @@ var allowedMimeTypes = map[string]bool{
 func (h *TaskHandler) UploadAttachment(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 
-	maxSize := int64(h.cfg.Limits.MaxAttachmentSizeMB) * 1024 * 1024
+	maxSizeMB, _ := strconv.Atoi(h.settingsMgr.GetWithDefault(r.Context(), settings.KeyMaxAttachmentMB, "10"))
+	maxSize := int64(maxSizeMB) * 1024 * 1024
 	r.Body = http.MaxBytesReader(w, r.Body, maxSize)
 
 	if err := r.ParseMultipartForm(maxSize); err != nil {
@@ -273,7 +417,8 @@ func (h *TaskHandler) UploadAttachment(w http.ResponseWriter, r *http.Request) {
 
 	// Generate storage path
 	storageName := fmt.Sprintf("%s_%s", uuid.New().String()[:8], fileName)
-	storageDir := filepath.Join(h.cfg.Storage.BasePath, h.cfg.Storage.AttachmentsDir)
+	basePath := h.settingsMgr.GetWithDefault(r.Context(), settings.KeyStorageBasePath, "data")
+	storageDir := filepath.Join(basePath, "attachments")
 	if err := os.MkdirAll(storageDir, 0755); err != nil {
 		http.Error(w, `{"error":"storage error"}`, http.StatusInternalServerError)
 		return

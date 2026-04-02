@@ -20,7 +20,6 @@ func (Project) Fields() []ent.Field {
 		field.String("git_provider").Default("github"),
 		field.String("default_branch").Default("main"),
 		field.Bool("auto_mode").Default(false),
-		field.Int("max_concurrency").Default(2).Positive(),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
 	}

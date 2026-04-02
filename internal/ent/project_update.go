@@ -100,27 +100,6 @@ func (_u *ProjectUpdate) SetNillableAutoMode(v *bool) *ProjectUpdate {
 	return _u
 }
 
-// SetMaxConcurrency sets the "max_concurrency" field.
-func (_u *ProjectUpdate) SetMaxConcurrency(v int) *ProjectUpdate {
-	_u.mutation.ResetMaxConcurrency()
-	_u.mutation.SetMaxConcurrency(v)
-	return _u
-}
-
-// SetNillableMaxConcurrency sets the "max_concurrency" field if the given value is not nil.
-func (_u *ProjectUpdate) SetNillableMaxConcurrency(v *int) *ProjectUpdate {
-	if v != nil {
-		_u.SetMaxConcurrency(*v)
-	}
-	return _u
-}
-
-// AddMaxConcurrency adds value to the "max_concurrency" field.
-func (_u *ProjectUpdate) AddMaxConcurrency(v int) *ProjectUpdate {
-	_u.mutation.AddMaxConcurrency(v)
-	return _u
-}
-
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *ProjectUpdate) SetUpdatedAt(v time.Time) *ProjectUpdate {
 	_u.mutation.SetUpdatedAt(v)
@@ -252,11 +231,6 @@ func (_u *ProjectUpdate) check() error {
 			return &ValidationError{Name: "repo_url", err: fmt.Errorf(`ent: validator failed for field "Project.repo_url": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.MaxConcurrency(); ok {
-		if err := project.MaxConcurrencyValidator(v); err != nil {
-			return &ValidationError{Name: "max_concurrency", err: fmt.Errorf(`ent: validator failed for field "Project.max_concurrency": %w`, err)}
-		}
-	}
 	return nil
 }
 
@@ -286,12 +260,6 @@ func (_u *ProjectUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AutoMode(); ok {
 		_spec.SetField(project.FieldAutoMode, field.TypeBool, value)
-	}
-	if value, ok := _u.mutation.MaxConcurrency(); ok {
-		_spec.SetField(project.FieldMaxConcurrency, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedMaxConcurrency(); ok {
-		_spec.AddField(project.FieldMaxConcurrency, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(project.FieldUpdatedAt, field.TypeTime, value)
@@ -476,27 +444,6 @@ func (_u *ProjectUpdateOne) SetNillableAutoMode(v *bool) *ProjectUpdateOne {
 	return _u
 }
 
-// SetMaxConcurrency sets the "max_concurrency" field.
-func (_u *ProjectUpdateOne) SetMaxConcurrency(v int) *ProjectUpdateOne {
-	_u.mutation.ResetMaxConcurrency()
-	_u.mutation.SetMaxConcurrency(v)
-	return _u
-}
-
-// SetNillableMaxConcurrency sets the "max_concurrency" field if the given value is not nil.
-func (_u *ProjectUpdateOne) SetNillableMaxConcurrency(v *int) *ProjectUpdateOne {
-	if v != nil {
-		_u.SetMaxConcurrency(*v)
-	}
-	return _u
-}
-
-// AddMaxConcurrency adds value to the "max_concurrency" field.
-func (_u *ProjectUpdateOne) AddMaxConcurrency(v int) *ProjectUpdateOne {
-	_u.mutation.AddMaxConcurrency(v)
-	return _u
-}
-
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *ProjectUpdateOne) SetUpdatedAt(v time.Time) *ProjectUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
@@ -641,11 +588,6 @@ func (_u *ProjectUpdateOne) check() error {
 			return &ValidationError{Name: "repo_url", err: fmt.Errorf(`ent: validator failed for field "Project.repo_url": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.MaxConcurrency(); ok {
-		if err := project.MaxConcurrencyValidator(v); err != nil {
-			return &ValidationError{Name: "max_concurrency", err: fmt.Errorf(`ent: validator failed for field "Project.max_concurrency": %w`, err)}
-		}
-	}
 	return nil
 }
 
@@ -692,12 +634,6 @@ func (_u *ProjectUpdateOne) sqlSave(ctx context.Context) (_node *Project, err er
 	}
 	if value, ok := _u.mutation.AutoMode(); ok {
 		_spec.SetField(project.FieldAutoMode, field.TypeBool, value)
-	}
-	if value, ok := _u.mutation.MaxConcurrency(); ok {
-		_spec.SetField(project.FieldMaxConcurrency, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedMaxConcurrency(); ok {
-		_spec.AddField(project.FieldMaxConcurrency, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(project.FieldUpdatedAt, field.TypeTime, value)

@@ -76,20 +76,6 @@ func (_c *ProjectCreate) SetNillableAutoMode(v *bool) *ProjectCreate {
 	return _c
 }
 
-// SetMaxConcurrency sets the "max_concurrency" field.
-func (_c *ProjectCreate) SetMaxConcurrency(v int) *ProjectCreate {
-	_c.mutation.SetMaxConcurrency(v)
-	return _c
-}
-
-// SetNillableMaxConcurrency sets the "max_concurrency" field if the given value is not nil.
-func (_c *ProjectCreate) SetNillableMaxConcurrency(v *int) *ProjectCreate {
-	if v != nil {
-		_c.SetMaxConcurrency(*v)
-	}
-	return _c
-}
-
 // SetCreatedAt sets the "created_at" field.
 func (_c *ProjectCreate) SetCreatedAt(v time.Time) *ProjectCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -195,10 +181,6 @@ func (_c *ProjectCreate) defaults() {
 		v := project.DefaultAutoMode
 		_c.mutation.SetAutoMode(v)
 	}
-	if _, ok := _c.mutation.MaxConcurrency(); !ok {
-		v := project.DefaultMaxConcurrency
-		_c.mutation.SetMaxConcurrency(v)
-	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := project.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -235,14 +217,6 @@ func (_c *ProjectCreate) check() error {
 	}
 	if _, ok := _c.mutation.AutoMode(); !ok {
 		return &ValidationError{Name: "auto_mode", err: errors.New(`ent: missing required field "Project.auto_mode"`)}
-	}
-	if _, ok := _c.mutation.MaxConcurrency(); !ok {
-		return &ValidationError{Name: "max_concurrency", err: errors.New(`ent: missing required field "Project.max_concurrency"`)}
-	}
-	if v, ok := _c.mutation.MaxConcurrency(); ok {
-		if err := project.MaxConcurrencyValidator(v); err != nil {
-			return &ValidationError{Name: "max_concurrency", err: fmt.Errorf(`ent: validator failed for field "Project.max_concurrency": %w`, err)}
-		}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Project.created_at"`)}
@@ -295,10 +269,6 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.AutoMode(); ok {
 		_spec.SetField(project.FieldAutoMode, field.TypeBool, value)
 		_node.AutoMode = value
-	}
-	if value, ok := _c.mutation.MaxConcurrency(); ok {
-		_spec.SetField(project.FieldMaxConcurrency, field.TypeInt, value)
-		_node.MaxConcurrency = value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(project.FieldCreatedAt, field.TypeTime, value)

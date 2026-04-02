@@ -5,8 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -24,19 +27,32 @@ func (f *Factory) Create(cfg agentprovider.AgentConfig) (agentprovider.AgentAdap
 	if binary == "" {
 		binary = "claude"
 	}
+	permissionMode := cfg.Extra["permission_mode"]
+	if permissionMode == "" {
+		permissionMode = "bypassPermissions"
+	}
 	return &Adapter{
-		binary: binary,
-		model:  cfg.Model,
+		binary:         binary,
+		model:          cfg.Model,
+		debug:          cfg.Extra["debug"] == "true",
+		permissionMode: permissionMode,
+		allowedTools:   cfg.Extra["allowed_tools"],
+		disallowedTools: cfg.Extra["disallowed_tools"],
 	}, nil
 }
 
-// Adapter implements AgentAdapter for Claude Code CLI.
+// Adapter implements AgentAdapter for Claude Code CLI using stream-json bidirectional mode.
 type Adapter struct {
-	binary string
-	model  string
+	binary          string
+	model           string
+	debug           bool
+	permissionMode  string
+	allowedTools    string
+	disallowedTools string
 
 	mu      sync.Mutex
 	cmd     *exec.Cmd
+	stdin   io.WriteCloser
 	cancel  context.CancelFunc
 	running bool
 }
@@ -49,8 +65,13 @@ func (a *Adapter) StartSession(ctx context.Context, req agentprovider.StartSessi
 	a.cancel = cancel
 
 	args := []string{
-		"--print",
 		"--output-format", "stream-json",
+		"--input-format", "stream-json",
+		"--verbose",
+	}
+
+	if a.permissionMode != "" {
+		args = append(args, "--permission-mode", a.permissionMode)
 	}
 
 	if a.model != "" {
@@ -58,31 +79,85 @@ func (a *Adapter) StartSession(ctx context.Context, req agentprovider.StartSessi
 	}
 
 	if req.SystemPrompt != "" {
-		args = append(args, "--system-prompt", req.SystemPrompt)
+		args = append(args, "--append-system-prompt", req.SystemPrompt)
 	}
 
-	args = append(args, req.TaskPrompt)
+	// Resume mode: continue an existing session
+	if req.ResumeSessionID != "" {
+		args = append(args, "--resume", req.ResumeSessionID)
+	}
+
+	if a.allowedTools != "" {
+		args = append(args, "--allowedTools", a.allowedTools)
+	}
+	if a.disallowedTools != "" {
+		args = append(args, "--disallowedTools", a.disallowedTools)
+	}
 
 	a.cmd = exec.CommandContext(sessionCtx, a.binary, args...)
 	a.cmd.Dir = req.WorkDir
 	a.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	a.cmd.Env = []string{
-		"PATH=/usr/local/bin:/usr/bin:/bin",
-		"HOME=" + os.TempDir(),
-		"LANG=en_US.UTF-8",
+
+	// Inherit parent environment, only filter out CLAUDECODE to prevent nested detection
+	env := os.Environ()
+	filtered := make([]string, 0, len(env))
+	for _, e := range env {
+		if !strings.HasPrefix(e, "CLAUDECODE=") {
+			filtered = append(filtered, e)
+		}
 	}
+	a.cmd.Env = filtered
+
 	a.running = true
 
-	return &agentprovider.SessionHandle{
+	handle := &agentprovider.SessionHandle{
 		ID:       fmt.Sprintf("claude-%p", a.cmd),
 		Provider: "claude-code",
-	}, nil
+	}
+
+	if a.debug {
+		fullCmd := a.binary + " " + strings.Join(args, " ")
+		handle.DebugInfo = map[string]string{
+			"binary":          a.binary,
+			"full_command":    fullCmd,
+			"workdir":         req.WorkDir,
+			"permission_mode": a.permissionMode,
+			"model":           a.model,
+			"system_prompt_len": fmt.Sprintf("%d", len(req.SystemPrompt)),
+			"task_prompt_len":   fmt.Sprintf("%d", len(req.TaskPrompt)),
+		}
+		for i, arg := range args {
+			handle.DebugInfo[fmt.Sprintf("arg_%d", i)] = arg
+		}
+		slog.Info("[DEBUG] claude command", "command", fullCmd, "workdir", req.WorkDir)
+	}
+
+	// Store task prompt to send after start
+	handle.DebugInfo = mergeMap(handle.DebugInfo, map[string]string{
+		"_task_prompt": req.TaskPrompt,
+	})
+
+	return handle, nil
 }
 
+// SendInput sends a user message to the running claude process via stdin.
 func (a *Adapter) SendInput(ctx context.Context, handle *agentprovider.SessionHandle, input agentprovider.UserInput) error {
-	// Claude Code CLI in --print mode doesn't support interactive input
-	// For follow-up interactions, start a new session with context
-	return fmt.Errorf("claude code --print mode does not support interactive input; use --resume or start new session")
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.stdin == nil {
+		return fmt.Errorf("no active stdin pipe")
+	}
+
+	msg := map[string]interface{}{
+		"type": "user",
+		"message": map[string]interface{}{
+			"role":    "user",
+			"content": input.Text,
+		},
+	}
+
+	return a.writeJSON(msg)
 }
 
 func (a *Adapter) StreamEvents(ctx context.Context, handle *agentprovider.SessionHandle) (<-chan model.AgentEvent, error) {
@@ -103,8 +178,32 @@ func (a *Adapter) StreamEvents(ctx context.Context, handle *agentprovider.Sessio
 		return nil, fmt.Errorf("getting stderr pipe: %w", err)
 	}
 
+	stdinPipe, err := a.cmd.StdinPipe()
+	if err != nil {
+		return nil, fmt.Errorf("getting stdin pipe: %w", err)
+	}
+	a.stdin = stdinPipe
+
 	if err := a.cmd.Start(); err != nil {
 		return nil, fmt.Errorf("starting claude: %w", err)
+	}
+
+	// Send the initial task prompt via stdin
+	taskPrompt := ""
+	if handle.DebugInfo != nil {
+		taskPrompt = handle.DebugInfo["_task_prompt"]
+	}
+	if taskPrompt != "" {
+		initMsg := map[string]interface{}{
+			"type": "user",
+			"message": map[string]interface{}{
+				"role":    "user",
+				"content": taskPrompt,
+			},
+		}
+		if err := a.writeJSON(initMsg); err != nil {
+			slog.Error("failed to send initial prompt", "error", err)
+		}
 	}
 
 	ch := make(chan model.AgentEvent, 64)
@@ -115,19 +214,22 @@ func (a *Adapter) StreamEvents(ctx context.Context, handle *agentprovider.Sessio
 		// Read stderr in background
 		go func() {
 			scanner := bufio.NewScanner(stderr)
+			scanner.Buffer(make([]byte, 64*1024), 10*1024*1024)
 			for scanner.Scan() {
+				line := scanner.Text()
+				if line == "" {
+					continue
+				}
 				ch <- model.AgentEvent{
-					Type: model.AgentEventError,
-					Payload: map[string]interface{}{
-						"message": scanner.Text(),
-					},
+					Type:    model.AgentEventError,
+					Payload: map[string]interface{}{"message": line},
 				}
 			}
 		}()
 
 		// Parse JSON stream from stdout
 		scanner := bufio.NewScanner(stdout)
-		scanner.Buffer(make([]byte, 1024*1024), 1024*1024) // 1MB buffer
+		scanner.Buffer(make([]byte, 64*1024), 10*1024*1024) // 64KB base, 10MB max
 
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -149,12 +251,11 @@ func (a *Adapter) StreamEvents(ctx context.Context, handle *agentprovider.Sessio
 		}
 
 		// Wait for process to finish
-		if err := a.cmd.Wait(); err != nil {
+		exitErr := a.cmd.Wait()
+		if exitErr != nil {
 			ch <- model.AgentEvent{
-				Type: model.AgentEventError,
-				Payload: map[string]interface{}{
-					"message": fmt.Sprintf("claude exited with error: %v", err),
-				},
+				Type:    model.AgentEventError,
+				Payload: map[string]interface{}{"message": fmt.Sprintf("claude exited with error: %v", exitErr)},
 			}
 		}
 
@@ -171,15 +272,23 @@ func (a *Adapter) Interrupt(ctx context.Context, handle *agentprovider.SessionHa
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.cancel != nil {
-		a.cancel()
+	// Gracefully close stdin first — claude will finish current work and exit
+	if a.stdin != nil {
+		a.stdin.Close()
+		a.stdin = nil
 	}
+
+	// Send SIGINT instead of SIGKILL for graceful shutdown
+	if a.cmd != nil && a.cmd.Process != nil {
+		_ = a.cmd.Process.Signal(syscall.SIGINT)
+	}
+
 	a.running = false
 	return nil
 }
 
 func (a *Adapter) Resume(ctx context.Context, handle *agentprovider.SessionHandle) error {
-	return fmt.Errorf("claude code resume requires starting a new session with --resume flag")
+	return fmt.Errorf("use --resume flag with a new session to resume")
 }
 
 func (a *Adapter) Close(ctx context.Context, handle *agentprovider.SessionHandle) error {
@@ -194,58 +303,121 @@ func (a *Adapter) Capabilities() model.AgentCapabilities {
 	}
 }
 
-// translateClaudeEvent converts Claude Code JSON stream output to unified AgentEvent.
+// writeJSON sends a JSON message to claude's stdin.
+func (a *Adapter) writeJSON(msg interface{}) error {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("marshaling message: %w", err)
+	}
+	data = append(data, '\n')
+	_, err = a.stdin.Write(data)
+	return err
+}
+
+// translateClaudeEvent converts Claude Code stream-json events to unified AgentEvent.
 func translateClaudeEvent(raw map[string]interface{}) model.AgentEvent {
 	eventType, _ := raw["type"].(string)
 
 	switch eventType {
+	case "system":
+		// System metadata — extract session ID for resume capability
+		payload := map[string]interface{}{"status": "system"}
+		if sid, ok := raw["session_id"].(string); ok {
+			payload["session_id"] = sid
+		}
+		if subtype, ok := raw["subtype"].(string); ok {
+			payload["subtype"] = subtype
+		}
+		for k, v := range raw {
+			if k != "type" {
+				payload[k] = v
+			}
+		}
+		return model.AgentEvent{
+			Type:    model.AgentEventRunStatus,
+			Payload: payload,
+		}
+
 	case "assistant":
-		content := ""
+		// Extract text and tool_use from content blocks
+		var textParts []string
+		var toolCalls []map[string]interface{}
+
 		if msg, ok := raw["message"].(map[string]interface{}); ok {
 			if contentBlocks, ok := msg["content"].([]interface{}); ok {
 				for _, block := range contentBlocks {
-					if b, ok := block.(map[string]interface{}); ok {
+					b, ok := block.(map[string]interface{})
+					if !ok {
+						continue
+					}
+					switch b["type"] {
+					case "text":
 						if text, ok := b["text"].(string); ok {
-							content += text
+							textParts = append(textParts, text)
 						}
+					case "tool_use":
+						toolCalls = append(toolCalls, map[string]interface{}{
+							"tool_use_id": b["id"],
+							"name":        b["name"],
+							"input":       b["input"],
+						})
 					}
 				}
 			}
 		}
+
+		// If there are tool calls, emit them
+		if len(toolCalls) > 0 {
+			return model.AgentEvent{
+				Type: model.AgentEventToolCall,
+				Payload: map[string]interface{}{
+					"tools": toolCalls,
+					"text":  strings.Join(textParts, "\n"),
+				},
+			}
+		}
+
 		return model.AgentEvent{
 			Type:    model.AgentEventMessageDelta,
-			Payload: map[string]interface{}{"content": content},
+			Payload: map[string]interface{}{"content": strings.Join(textParts, "\n")},
 		}
 
-	case "tool_use":
+	case "user":
+		// User message echo - treat as run status
 		return model.AgentEvent{
-			Type: model.AgentEventToolCall,
-			Payload: map[string]interface{}{
-				"tool":  raw["name"],
-				"input": raw["input"],
-			},
-		}
-
-	case "tool_result":
-		return model.AgentEvent{
-			Type: model.AgentEventToolResult,
-			Payload: map[string]interface{}{
-				"result": raw["content"],
-			},
+			Type:    model.AgentEventRunStatus,
+			Payload: map[string]interface{}{"status": "user_message", "raw": raw},
 		}
 
 	case "result":
+		// Final result with token usage
+		resultText, _ := raw["result"].(string)
 		return model.AgentEvent{
 			Type: model.AgentEventMessageCompleted,
 			Payload: map[string]interface{}{
-				"content": raw["result"],
+				"content":      resultText,
+				"cost_usd":     raw["cost_usd"],
+				"duration_ms":  raw["duration_ms"],
+				"is_error":     raw["is_error"],
+				"session_id":   raw["session_id"],
 			},
 		}
 
 	default:
+		// Pass through unknown events (tool_result, etc.)
 		return model.AgentEvent{
 			Type:    model.AgentEventRunStatus,
 			Payload: raw,
 		}
 	}
+}
+
+func mergeMap(base, extra map[string]string) map[string]string {
+	if base == nil {
+		base = make(map[string]string)
+	}
+	for k, v := range extra {
+		base[k] = v
+	}
+	return base
 }

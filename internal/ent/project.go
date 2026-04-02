@@ -27,8 +27,6 @@ type Project struct {
 	DefaultBranch string `json:"default_branch,omitempty"`
 	// AutoMode holds the value of the "auto_mode" field.
 	AutoMode bool `json:"auto_mode,omitempty"`
-	// MaxConcurrency holds the value of the "max_concurrency" field.
-	MaxConcurrency int `json:"max_concurrency,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -75,7 +73,7 @@ func (*Project) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case project.FieldAutoMode:
 			values[i] = new(sql.NullBool)
-		case project.FieldID, project.FieldMaxConcurrency:
+		case project.FieldID:
 			values[i] = new(sql.NullInt64)
 		case project.FieldName, project.FieldRepoURL, project.FieldGitProvider, project.FieldDefaultBranch:
 			values[i] = new(sql.NullString)
@@ -131,12 +129,6 @@ func (_m *Project) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field auto_mode", values[i])
 			} else if value.Valid {
 				_m.AutoMode = value.Bool
-			}
-		case project.FieldMaxConcurrency:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field max_concurrency", values[i])
-			} else if value.Valid {
-				_m.MaxConcurrency = int(value.Int64)
 			}
 		case project.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -210,9 +202,6 @@ func (_m *Project) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("auto_mode=")
 	builder.WriteString(fmt.Sprintf("%v", _m.AutoMode))
-	builder.WriteString(", ")
-	builder.WriteString("max_concurrency=")
-	builder.WriteString(fmt.Sprintf("%v", _m.MaxConcurrency))
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

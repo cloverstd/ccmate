@@ -11,6 +11,8 @@ import (
 type SessionHandle struct {
 	ID       string
 	Provider string
+	// DebugInfo is populated when debug mode is on, contains command details.
+	DebugInfo map[string]string
 }
 
 // StartSessionRequest contains parameters for starting an agent session.
@@ -19,6 +21,7 @@ type StartSessionRequest struct {
 	SystemPrompt string
 	TaskPrompt   string
 	Model        string
+	ResumeSessionID string // If set, resume this session instead of starting fresh
 }
 
 // UserInput represents input sent to an agent.

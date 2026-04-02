@@ -12,6 +12,7 @@ import (
 	"github.com/cloverstd/ccmate/internal/ent"
 	"github.com/cloverstd/ccmate/internal/gitprovider"
 	"github.com/cloverstd/ccmate/internal/scheduler"
+	"github.com/cloverstd/ccmate/internal/settings"
 	"github.com/cloverstd/ccmate/internal/sse"
 	"github.com/cloverstd/ccmate/internal/static"
 	"github.com/go-chi/chi/v5"
@@ -25,6 +26,7 @@ func NewRouter(
 	sched *scheduler.Scheduler,
 	passkeySvc *auth.PasskeyService,
 	gitProv gitprovider.GitProvider,
+	settingsMgr *settings.Manager,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -34,80 +36,96 @@ func NewRouter(
 	r.Use(middleware.Logger)
 	r.Use(middleware.CORS)
 
-	authHandler := handler.NewAuthHandler(client, cfg, passkeySvc)
-	projectHandler := handler.NewProjectHandler(client)
-	taskHandler := handler.NewTaskHandler(client, cfg, broker, sched)
+	authHandler := handler.NewAuthHandler(client, cfg, passkeySvc, settingsMgr)
+	projectHandler := handler.NewProjectHandler(client, gitProv, settingsMgr)
+	taskHandler := handler.NewTaskHandler(client, cfg, broker, sched, gitProv, settingsMgr)
 	webhookHandler := handler.NewWebhookHandler(client, cfg, sched)
+	setupHandler := handler.NewSetupHandler(settingsMgr, gitProv)
 	if gitProv != nil {
 		webhookHandler.SetGitProvider(gitProv)
 	}
 
-	// Public auth routes
-	r.Route("/api/auth", func(r chi.Router) {
-		// GitHub OAuth
-		r.Get("/github/start", authHandler.GitHubOAuthStart)
-		r.Get("/github/callback", authHandler.GitHubOAuthCallback)
-
-		// Passkey login (for users who already configured passkey)
-		r.Post("/passkey/login/start", authHandler.PasskeyLoginStart)
-		r.Post("/passkey/login/finish", authHandler.PasskeyLoginFinish)
-
-		// Logout
-		r.Post("/logout", authHandler.Logout)
-	})
-
-	// Webhook routes (authenticated via signature)
+	// Webhook
 	r.Post("/webhooks/github", webhookHandler.HandleGitHub)
 
-	// Metrics endpoint (public)
+	// Metrics
 	r.Get("/metrics", handler.MetricsHandler(client))
 
-	// Protected API routes
+	// All /api routes
 	r.Route("/api", func(r chi.Router) {
-		r.Use(middleware.RequireAuth(passkeySvc))
+		// --- Public routes ---
+		r.Group(func(r chi.Router) {
+			// Setup
+			r.Get("/setup/status", setupHandler.Status)
+			r.Post("/setup", setupHandler.Setup)
 
-		// Current user info
-		r.Get("/auth/me", authHandler.GetCurrentUser)
+			// Auth
+			r.Get("/auth/github/start", authHandler.GitHubOAuthStart)
+			r.Get("/auth/github/callback", authHandler.GitHubOAuthCallback)
+			r.Post("/auth/passkey/login/start", authHandler.PasskeyLoginStart)
+			r.Post("/auth/passkey/login/finish", authHandler.PasskeyLoginFinish)
+			r.Get("/auth/me", authHandler.GetCurrentUser)
+			r.Post("/auth/logout", authHandler.Logout)
+		})
 
-		// Passkey management (post-login)
-		r.Post("/auth/passkey/register/start", authHandler.PasskeyRegisterStart)
-		r.Post("/auth/passkey/register/finish", authHandler.PasskeyRegisterFinish)
-		r.Delete("/auth/passkey", authHandler.PasskeyRemove)
+		// --- Protected routes ---
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireAuth(passkeySvc))
 
-		// Projects
-		r.Get("/projects", projectHandler.List)
-		r.Post("/projects", projectHandler.Create)
-		r.Put("/projects/{id}", projectHandler.Update)
-		r.Get("/projects/{id}", projectHandler.Get)
+			// Passkey management
+			r.Post("/auth/passkey/register/start", authHandler.PasskeyRegisterStart)
+			r.Post("/auth/passkey/register/finish", authHandler.PasskeyRegisterFinish)
+			r.Delete("/auth/passkey", authHandler.PasskeyRemove)
 
-		// Label rules
-		r.Get("/projects/{id}/label-rules", projectHandler.ListLabelRules)
-		r.Post("/projects/{id}/label-rules", projectHandler.CreateLabelRule)
-		r.Delete("/label-rules/{id}", projectHandler.DeleteLabelRule)
+			// Settings
+			r.Get("/settings", setupHandler.GetSettings)
+			r.Put("/settings", setupHandler.UpdateSettings)
+			r.Get("/github/permissions", setupHandler.CheckGitHubPermissions)
 
-		// Prompt templates
-		r.Get("/prompt-templates", projectHandler.ListPromptTemplates)
-		r.Post("/prompt-templates", projectHandler.CreatePromptTemplate)
-		r.Put("/prompt-templates/{id}", projectHandler.UpdatePromptTemplate)
-		r.Delete("/prompt-templates/{id}", projectHandler.DeletePromptTemplate)
+			// GitHub repos
+			r.Get("/github/repos", projectHandler.ListGitHubRepos)
 
-		// Tasks
-		r.Get("/tasks", taskHandler.List)
-		r.Post("/tasks", taskHandler.Create)
-		r.Get("/tasks/{id}", taskHandler.Get)
-		r.Post("/tasks/{id}/pause", taskHandler.Pause)
-		r.Post("/tasks/{id}/resume", taskHandler.Resume)
-		r.Post("/tasks/{id}/retry", taskHandler.Retry)
-		r.Post("/tasks/{id}/cancel", taskHandler.Cancel)
-		r.Post("/tasks/{id}/messages", taskHandler.SendMessage)
-		r.Post("/tasks/{id}/attachments", taskHandler.UploadAttachment)
-		r.Get("/tasks/{id}/events/stream", taskHandler.EventStream)
+			// Projects
+			r.Get("/projects", projectHandler.List)
+			r.Post("/projects", projectHandler.Create)
+			r.Put("/projects/{id}", projectHandler.Update)
+			r.Get("/projects/{id}", projectHandler.Get)
+			r.Get("/projects/{id}/tasks", projectHandler.ListProjectTasks)
+			r.Get("/projects/{id}/issues", projectHandler.ListRepoIssues)
+			r.Get("/projects/{id}/pulls", projectHandler.ListRepoPRs)
+			r.Get("/projects/{id}/git-info", projectHandler.GetRepoInfo)
+			r.Get("/projects/{id}/commits", projectHandler.GetBranchCommits)
+			r.Post("/projects/{id}/pull", projectHandler.PullRepo)
 
-		// Models
-		r.Get("/models", projectHandler.ListModels)
-		r.Post("/models", projectHandler.CreateModel)
-		r.Put("/models/{id}", projectHandler.UpdateModel)
-		r.Delete("/models/{id}", projectHandler.DeleteModel)
+			// Global label rules
+			r.Get("/label-rules", projectHandler.ListGlobalLabelRules)
+
+			// Prompt templates
+			r.Get("/prompt-templates", projectHandler.ListPromptTemplates)
+			r.Post("/prompt-templates", projectHandler.CreatePromptTemplate)
+			r.Put("/prompt-templates/{id}", projectHandler.UpdatePromptTemplate)
+			r.Delete("/prompt-templates/{id}", projectHandler.DeletePromptTemplate)
+
+			// Tasks
+			r.Get("/tasks", taskHandler.List)
+			r.Post("/tasks", taskHandler.Create)
+			r.Post("/tasks/from-prompt", taskHandler.CreateFromPrompt)
+			r.Get("/tasks/{id}", taskHandler.Get)
+			r.Post("/tasks/{id}/pause", taskHandler.Pause)
+			r.Post("/tasks/{id}/resume", taskHandler.Resume)
+			r.Post("/tasks/{id}/retry", taskHandler.Retry)
+			r.Post("/tasks/{id}/cancel", taskHandler.Cancel)
+			r.Post("/tasks/{id}/complete", taskHandler.Complete)
+			r.Post("/tasks/{id}/messages", taskHandler.SendMessage)
+			r.Post("/tasks/{id}/attachments", taskHandler.UploadAttachment)
+			r.Get("/tasks/{id}/events/stream", taskHandler.EventStream)
+
+			// Models
+			r.Get("/models", projectHandler.ListModels)
+			r.Post("/models", projectHandler.CreateModel)
+			r.Put("/models/{id}", projectHandler.UpdateModel)
+			r.Delete("/models/{id}", projectHandler.DeleteModel)
+		})
 	})
 
 	fileServer(r)
@@ -120,7 +138,6 @@ func fileServer(r chi.Router) {
 		return
 	}
 	fsHandler := http.FileServer(http.FS(distFS))
-
 	r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/webhooks/") || path == "/metrics" {

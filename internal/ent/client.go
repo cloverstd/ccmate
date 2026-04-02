@@ -26,6 +26,7 @@ import (
 	"github.com/cloverstd/ccmate/internal/ent/session"
 	"github.com/cloverstd/ccmate/internal/ent/sessionevent"
 	"github.com/cloverstd/ccmate/internal/ent/sessionmessage"
+	"github.com/cloverstd/ccmate/internal/ent/systemsetting"
 	"github.com/cloverstd/ccmate/internal/ent/task"
 	"github.com/cloverstd/ccmate/internal/ent/webhookreceipt"
 )
@@ -57,6 +58,8 @@ type Client struct {
 	SessionEvent *SessionEventClient
 	// SessionMessage is the client for interacting with the SessionMessage builders.
 	SessionMessage *SessionMessageClient
+	// SystemSetting is the client for interacting with the SystemSetting builders.
+	SystemSetting *SystemSettingClient
 	// Task is the client for interacting with the Task builders.
 	Task *TaskClient
 	// WebhookReceipt is the client for interacting with the WebhookReceipt builders.
@@ -83,6 +86,7 @@ func (c *Client) init() {
 	c.Session = NewSessionClient(c.config)
 	c.SessionEvent = NewSessionEventClient(c.config)
 	c.SessionMessage = NewSessionMessageClient(c.config)
+	c.SystemSetting = NewSystemSettingClient(c.config)
 	c.Task = NewTaskClient(c.config)
 	c.WebhookReceipt = NewWebhookReceiptClient(c.config)
 }
@@ -188,6 +192,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		Session:                NewSessionClient(cfg),
 		SessionEvent:           NewSessionEventClient(cfg),
 		SessionMessage:         NewSessionMessageClient(cfg),
+		SystemSetting:          NewSystemSettingClient(cfg),
 		Task:                   NewTaskClient(cfg),
 		WebhookReceipt:         NewWebhookReceiptClient(cfg),
 	}, nil
@@ -220,6 +225,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		Session:                NewSessionClient(cfg),
 		SessionEvent:           NewSessionEventClient(cfg),
 		SessionMessage:         NewSessionMessageClient(cfg),
+		SystemSetting:          NewSystemSettingClient(cfg),
 		Task:                   NewTaskClient(cfg),
 		WebhookReceipt:         NewWebhookReceiptClient(cfg),
 	}, nil
@@ -253,7 +259,7 @@ func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.AgentProfile, c.Attachment, c.CommandAudit, c.ExecutionLease, c.Project,
 		c.ProjectLabelRule, c.PromptTemplate, c.PromptTemplateSnapshot, c.Session,
-		c.SessionEvent, c.SessionMessage, c.Task, c.WebhookReceipt,
+		c.SessionEvent, c.SessionMessage, c.SystemSetting, c.Task, c.WebhookReceipt,
 	} {
 		n.Use(hooks...)
 	}
@@ -265,7 +271,7 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.AgentProfile, c.Attachment, c.CommandAudit, c.ExecutionLease, c.Project,
 		c.ProjectLabelRule, c.PromptTemplate, c.PromptTemplateSnapshot, c.Session,
-		c.SessionEvent, c.SessionMessage, c.Task, c.WebhookReceipt,
+		c.SessionEvent, c.SessionMessage, c.SystemSetting, c.Task, c.WebhookReceipt,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -296,6 +302,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.SessionEvent.mutate(ctx, m)
 	case *SessionMessageMutation:
 		return c.SessionMessage.mutate(ctx, m)
+	case *SystemSettingMutation:
+		return c.SystemSetting.mutate(ctx, m)
 	case *TaskMutation:
 		return c.Task.mutate(ctx, m)
 	case *WebhookReceiptMutation:
@@ -2024,6 +2032,139 @@ func (c *SessionMessageClient) mutate(ctx context.Context, m *SessionMessageMuta
 	}
 }
 
+// SystemSettingClient is a client for the SystemSetting schema.
+type SystemSettingClient struct {
+	config
+}
+
+// NewSystemSettingClient returns a client for the SystemSetting from the given config.
+func NewSystemSettingClient(c config) *SystemSettingClient {
+	return &SystemSettingClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `systemsetting.Hooks(f(g(h())))`.
+func (c *SystemSettingClient) Use(hooks ...Hook) {
+	c.hooks.SystemSetting = append(c.hooks.SystemSetting, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `systemsetting.Intercept(f(g(h())))`.
+func (c *SystemSettingClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SystemSetting = append(c.inters.SystemSetting, interceptors...)
+}
+
+// Create returns a builder for creating a SystemSetting entity.
+func (c *SystemSettingClient) Create() *SystemSettingCreate {
+	mutation := newSystemSettingMutation(c.config, OpCreate)
+	return &SystemSettingCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SystemSetting entities.
+func (c *SystemSettingClient) CreateBulk(builders ...*SystemSettingCreate) *SystemSettingCreateBulk {
+	return &SystemSettingCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SystemSettingClient) MapCreateBulk(slice any, setFunc func(*SystemSettingCreate, int)) *SystemSettingCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SystemSettingCreateBulk{err: fmt.Errorf("calling to SystemSettingClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SystemSettingCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SystemSettingCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SystemSetting.
+func (c *SystemSettingClient) Update() *SystemSettingUpdate {
+	mutation := newSystemSettingMutation(c.config, OpUpdate)
+	return &SystemSettingUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SystemSettingClient) UpdateOne(_m *SystemSetting) *SystemSettingUpdateOne {
+	mutation := newSystemSettingMutation(c.config, OpUpdateOne, withSystemSetting(_m))
+	return &SystemSettingUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SystemSettingClient) UpdateOneID(id int) *SystemSettingUpdateOne {
+	mutation := newSystemSettingMutation(c.config, OpUpdateOne, withSystemSettingID(id))
+	return &SystemSettingUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SystemSetting.
+func (c *SystemSettingClient) Delete() *SystemSettingDelete {
+	mutation := newSystemSettingMutation(c.config, OpDelete)
+	return &SystemSettingDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SystemSettingClient) DeleteOne(_m *SystemSetting) *SystemSettingDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SystemSettingClient) DeleteOneID(id int) *SystemSettingDeleteOne {
+	builder := c.Delete().Where(systemsetting.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SystemSettingDeleteOne{builder}
+}
+
+// Query returns a query builder for SystemSetting.
+func (c *SystemSettingClient) Query() *SystemSettingQuery {
+	return &SystemSettingQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSystemSetting},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SystemSetting entity by its id.
+func (c *SystemSettingClient) Get(ctx context.Context, id int) (*SystemSetting, error) {
+	return c.Query().Where(systemsetting.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SystemSettingClient) GetX(ctx context.Context, id int) *SystemSetting {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SystemSettingClient) Hooks() []Hook {
+	return c.hooks.SystemSetting
+}
+
+// Interceptors returns the client interceptors.
+func (c *SystemSettingClient) Interceptors() []Interceptor {
+	return c.inters.SystemSetting
+}
+
+func (c *SystemSettingClient) mutate(ctx context.Context, m *SystemSettingMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SystemSettingCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SystemSettingUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SystemSettingUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SystemSettingDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SystemSetting mutation op: %q", m.Op())
+	}
+}
+
 // TaskClient is a client for the Task schema.
 type TaskClient struct {
 	config
@@ -2391,11 +2532,12 @@ type (
 	hooks struct {
 		AgentProfile, Attachment, CommandAudit, ExecutionLease, Project,
 		ProjectLabelRule, PromptTemplate, PromptTemplateSnapshot, Session,
-		SessionEvent, SessionMessage, Task, WebhookReceipt []ent.Hook
+		SessionEvent, SessionMessage, SystemSetting, Task, WebhookReceipt []ent.Hook
 	}
 	inters struct {
 		AgentProfile, Attachment, CommandAudit, ExecutionLease, Project,
 		ProjectLabelRule, PromptTemplate, PromptTemplateSnapshot, Session,
-		SessionEvent, SessionMessage, Task, WebhookReceipt []ent.Interceptor
+		SessionEvent, SessionMessage, SystemSetting, Task,
+		WebhookReceipt []ent.Interceptor
 	}
 )

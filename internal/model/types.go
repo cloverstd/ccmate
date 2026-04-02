@@ -92,41 +92,50 @@ func (r RepoRef) FullName() string {
 	return r.Owner + "/" + r.Name
 }
 
+// RepoInfo represents a repository from a git provider.
+type RepoInfo struct {
+	FullName      string `json:"full_name"`
+	HTMLURL       string `json:"html_url"`
+	DefaultBranch string `json:"default_branch"`
+	Description   string `json:"description"`
+	Private       bool   `json:"private"`
+}
+
 // Issue represents an issue from a git provider.
 type Issue struct {
-	Number int
-	Title  string
-	Body   string
-	Labels []string
-	State  string
-	User   string
+	Number int      `json:"number"`
+	Title  string   `json:"title"`
+	Body   string   `json:"body"`
+	Labels []string `json:"labels"`
+	State  string   `json:"state"`
+	User   string   `json:"user"`
 }
 
 // Comment represents a comment on an issue or PR.
 type Comment struct {
-	ID        int64
-	Body      string
-	User      string
-	CreatedAt time.Time
+	ID        int64     `json:"id"`
+	Body      string    `json:"body"`
+	User      string    `json:"user"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // PullRequest represents a pull request.
 type PullRequest struct {
-	Number  int
-	Title   string
-	Body    string
-	State   string
-	HTMLURL string
-	Head    string
-	Base    string
+	Number  int    `json:"number"`
+	Title   string `json:"title"`
+	Body    string `json:"body"`
+	State   string `json:"state"`
+	HTMLURL string `json:"html_url"`
+	Head    string `json:"head"`
+	Base    string `json:"base"`
 }
 
 // Review represents a PR review.
 type Review struct {
-	ID    int64
-	State string
-	Body  string
-	User  string
+	ID    int64  `json:"id"`
+	State string `json:"state"`
+	Body  string `json:"body"`
+	User  string `json:"user"`
 }
 
 // CreatePRRequest contains parameters for creating a pull request.

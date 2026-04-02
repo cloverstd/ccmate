@@ -80,11 +80,6 @@ func AutoMode(v bool) predicate.Project {
 	return predicate.Project(sql.FieldEQ(FieldAutoMode, v))
 }
 
-// MaxConcurrency applies equality check predicate on the "max_concurrency" field. It's identical to MaxConcurrencyEQ.
-func MaxConcurrency(v int) predicate.Project {
-	return predicate.Project(sql.FieldEQ(FieldMaxConcurrency, v))
-}
-
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.Project {
 	return predicate.Project(sql.FieldEQ(FieldCreatedAt, v))
@@ -363,46 +358,6 @@ func AutoModeEQ(v bool) predicate.Project {
 // AutoModeNEQ applies the NEQ predicate on the "auto_mode" field.
 func AutoModeNEQ(v bool) predicate.Project {
 	return predicate.Project(sql.FieldNEQ(FieldAutoMode, v))
-}
-
-// MaxConcurrencyEQ applies the EQ predicate on the "max_concurrency" field.
-func MaxConcurrencyEQ(v int) predicate.Project {
-	return predicate.Project(sql.FieldEQ(FieldMaxConcurrency, v))
-}
-
-// MaxConcurrencyNEQ applies the NEQ predicate on the "max_concurrency" field.
-func MaxConcurrencyNEQ(v int) predicate.Project {
-	return predicate.Project(sql.FieldNEQ(FieldMaxConcurrency, v))
-}
-
-// MaxConcurrencyIn applies the In predicate on the "max_concurrency" field.
-func MaxConcurrencyIn(vs ...int) predicate.Project {
-	return predicate.Project(sql.FieldIn(FieldMaxConcurrency, vs...))
-}
-
-// MaxConcurrencyNotIn applies the NotIn predicate on the "max_concurrency" field.
-func MaxConcurrencyNotIn(vs ...int) predicate.Project {
-	return predicate.Project(sql.FieldNotIn(FieldMaxConcurrency, vs...))
-}
-
-// MaxConcurrencyGT applies the GT predicate on the "max_concurrency" field.
-func MaxConcurrencyGT(v int) predicate.Project {
-	return predicate.Project(sql.FieldGT(FieldMaxConcurrency, v))
-}
-
-// MaxConcurrencyGTE applies the GTE predicate on the "max_concurrency" field.
-func MaxConcurrencyGTE(v int) predicate.Project {
-	return predicate.Project(sql.FieldGTE(FieldMaxConcurrency, v))
-}
-
-// MaxConcurrencyLT applies the LT predicate on the "max_concurrency" field.
-func MaxConcurrencyLT(v int) predicate.Project {
-	return predicate.Project(sql.FieldLT(FieldMaxConcurrency, v))
-}
-
-// MaxConcurrencyLTE applies the LTE predicate on the "max_concurrency" field.
-func MaxConcurrencyLTE(v int) predicate.Project {
-	return predicate.Project(sql.FieldLTE(FieldMaxConcurrency, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

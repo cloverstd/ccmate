@@ -23,6 +23,7 @@ import (
 	"github.com/cloverstd/ccmate/internal/ent/session"
 	"github.com/cloverstd/ccmate/internal/ent/sessionevent"
 	"github.com/cloverstd/ccmate/internal/ent/sessionmessage"
+	"github.com/cloverstd/ccmate/internal/ent/systemsetting"
 	"github.com/cloverstd/ccmate/internal/ent/task"
 	"github.com/cloverstd/ccmate/internal/ent/webhookreceipt"
 )
@@ -96,6 +97,7 @@ func checkColumn(t, c string) error {
 			session.Table:                session.ValidColumn,
 			sessionevent.Table:           sessionevent.ValidColumn,
 			sessionmessage.Table:         sessionmessage.ValidColumn,
+			systemsetting.Table:          systemsetting.ValidColumn,
 			task.Table:                   task.ValidColumn,
 			webhookreceipt.Table:         webhookreceipt.ValidColumn,
 		})
