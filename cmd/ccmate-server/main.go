@@ -32,10 +32,18 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+var version = "dev"
+
 func main() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
 	resetPasskeys := flag.Bool("reset-passkeys", false, "clear all passkey registrations")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println("ccmate", version)
+		return
+	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)

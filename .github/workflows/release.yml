@@ -1,0 +1,116 @@
+name: Release
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            zig_target: x86_64-linux-gnu
+          - goos: linux
+            goarch: arm64
+            zig_target: aarch64-linux-gnu
+          - goos: darwin
+            goarch: amd64
+            zig_target: x86_64-macos
+          - goos: darwin
+            goarch: arm64
+            zig_target: aarch64-macos
+
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: 1
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: goto-bus-stop/setup-zig@v2
+
+      - name: Build frontend
+        run: |
+          cd web
+          bun install --frozen-lockfile
+          bun run build
+
+      - name: Build binary
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          if [[ "$VERSION" != v* ]]; then
+            VERSION="dev-$(echo $GITHUB_SHA | head -c 7)"
+          fi
+
+          export CC="zig cc -target ${{ matrix.zig_target }}"
+          export CXX="zig c++ -target ${{ matrix.zig_target }}"
+
+          BINARY_NAME="ccmate-${{ matrix.goos }}-${{ matrix.goarch }}"
+          go build -trimpath \
+            -ldflags "-s -w -X main.version=${VERSION}" \
+            -o "dist/${BINARY_NAME}" \
+            ./cmd/ccmate-server
+
+          cd dist
+          tar czf "${BINARY_NAME}.tar.gz" "${BINARY_NAME}"
+          rm "${BINARY_NAME}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ccmate-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: cd dist && sha256sum *.tar.gz > checksums.txt
+
+      # Pre-release for master branch pushes
+      - name: Pre-release
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHORT_SHA=$(echo $GITHUB_SHA | head -c 7)
+          TAG="dev-${SHORT_SHA}"
+          gh release delete "${TAG}" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "${TAG}" dist/* \
+            --title "Dev Build ${SHORT_SHA}" \
+            --notes "Automated pre-release from \`master\` branch.
+
+          Commit: ${GITHUB_SHA}
+          Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --prerelease
+
+      # Stable release for version tags
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" dist/* \
+            --title "${{ github.ref_name }}" \
+            --generate-notes
