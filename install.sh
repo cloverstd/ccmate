@@ -13,6 +13,7 @@ INSTALL_DIR="/usr/local/bin"
 VERSION=""
 BINARY_NAME="ccmate"
 SETUP_SYSTEMD=false
+SERVICE_USER=""
 CONFIG_DIR="/etc/ccmate"
 DATA_DIR="/var/lib/ccmate"
 
@@ -22,6 +23,7 @@ while [[ $# -gt 0 ]]; do
     --version|-v) VERSION="$2"; shift 2 ;;
     --dir|-d) INSTALL_DIR="$2"; shift 2 ;;
     --systemd) SETUP_SYSTEMD=true; shift ;;
+    --user|-u) SERVICE_USER="$2"; shift 2 ;;
     --config-dir) CONFIG_DIR="$2"; shift 2 ;;
     --data-dir) DATA_DIR="$2"; shift 2 ;;
     --help|-h)
@@ -32,6 +34,8 @@ Options:
   --version, -v VERSION   Version to install (default: latest stable, 'dev' for pre-release)
   --dir, -d DIR           Binary install directory (default: /usr/local/bin)
   --systemd               Set up systemd service (Linux only)
+  --user, -u USER         User to run the service as (default: current user)
+                          The user must have claude/codex credentials in their HOME.
   --config-dir DIR        Config directory (default: /etc/ccmate)
   --data-dir DIR          Data directory (default: /var/lib/ccmate)
   --help, -h              Show this help
@@ -40,11 +44,11 @@ Examples:
   # Install latest stable
   curl -fsSL https://raw.githubusercontent.com/cloverstd/ccmate/master/install.sh | bash
 
-  # Install with systemd service
+  # Install with systemd service (runs as current user)
   curl -fsSL ... | bash -s -- --systemd
 
-  # Install specific version
-  curl -fsSL ... | bash -s -- --version v1.0.0 --systemd
+  # Install as specific user who has claude/codex auth
+  curl -fsSL ... | bash -s -- --systemd --user deploy
 HELP
       exit 0
       ;;
@@ -136,17 +140,26 @@ setup_systemd() {
     return
   fi
 
-  echo "Setting up systemd service..."
+  # Determine service user: explicit --user, or current user
+  local svc_user="${SERVICE_USER:-$(whoami)}"
+  local svc_group
+  svc_group="$(id -gn "$svc_user" 2>/dev/null || echo "$svc_user")"
+  local svc_home
+  svc_home="$(eval echo "~${svc_user}")"
 
-  # Create system user if not exists
-  if ! id ccmate &>/dev/null; then
-    sudo useradd --system --no-create-home --shell /usr/sbin/nologin ccmate
-    echo "Created system user 'ccmate'"
+  if ! id "$svc_user" &>/dev/null; then
+    echo "Error: User '${svc_user}' does not exist." >&2
+    echo "The service user needs a real HOME with claude/codex credentials." >&2
+    exit 1
   fi
+
+  echo "Setting up systemd service..."
+  echo "  Service user: ${svc_user}"
+  echo "  User HOME:    ${svc_home}"
 
   # Create directories
   sudo mkdir -p "$CONFIG_DIR" "$DATA_DIR"
-  sudo chown ccmate:ccmate "$DATA_DIR"
+  sudo chown "${svc_user}:${svc_group}" "$DATA_DIR"
 
   # Create default config if not exists
   if [[ ! -f "${CONFIG_DIR}/config.yaml" ]]; then
@@ -159,13 +172,17 @@ database:
   driver: sqlite3
   dsn: "${DATA_DIR}/ccmate.db"
 YAML
-    sudo chown ccmate:ccmate "${CONFIG_DIR}/config.yaml"
+    sudo chown "${svc_user}:${svc_group}" "${CONFIG_DIR}/config.yaml"
     echo "Created default config at ${CONFIG_DIR}/config.yaml"
   else
     echo "Config already exists at ${CONFIG_DIR}/config.yaml, skipping."
   fi
 
   # Write systemd unit file
+  # The service runs as the specified user so it can access:
+  #   - Agent CLI tools (claude, codex) in the user's PATH
+  #   - Agent auth credentials in the user's HOME (~/.claude, ~/.codex, etc.)
+  #   - Git config (~/.gitconfig)
   sudo tee /etc/systemd/system/ccmate.service > /dev/null <<UNIT
 [Unit]
 Description=ccmate - Coding Agent Manager
@@ -174,24 +191,24 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=ccmate
-Group=ccmate
+User=${svc_user}
+Group=${svc_group}
 ExecStart=${INSTALL_DIR}/${BINARY_NAME} -config ${CONFIG_DIR}/config.yaml
 WorkingDirectory=${DATA_DIR}
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=65536
 
-# Security hardening
+# Use the real user HOME so agent CLIs can find their credentials
+Environment=HOME=${svc_home}
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${svc_home}/.local/bin:${svc_home}/.npm-global/bin
+
+# Security hardening (allow access to user HOME for agent credentials)
 NoNewPrivileges=true
 ProtectSystem=strict
-ProtectHome=true
 ReadWritePaths=${DATA_DIR}
-ReadOnlyPaths=${CONFIG_DIR}
+ReadOnlyPaths=${CONFIG_DIR} ${svc_home}
 PrivateTmp=true
-
-# Environment
-Environment=HOME=${DATA_DIR}
 
 [Install]
 WantedBy=multi-user.target
@@ -200,7 +217,6 @@ UNIT
   sudo systemctl daemon-reload
   echo "Systemd service installed."
 
-  # Enable and start if this is a fresh install
   if ! systemctl is-enabled ccmate &>/dev/null; then
     sudo systemctl enable ccmate
     echo "Service enabled on boot."
@@ -216,6 +232,10 @@ UNIT
   echo ""
   echo "Config: ${CONFIG_DIR}/config.yaml"
   echo "Data:   ${DATA_DIR}/"
+  echo ""
+  echo "NOTE: The service runs as '${svc_user}'. Make sure this user has:"
+  echo "  - Claude Code / Codex CLI installed and authenticated"
+  echo "  - Git configured (git config user.name / user.email)"
 }
 
 main() {
