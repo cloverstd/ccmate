@@ -99,8 +99,11 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Generate checksums
-        run: cd dist && sha256sum *.tar.gz > checksums.txt
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          cp dist/*.tar.gz release/
+          cd release && sha256sum *.tar.gz > checksums.txt
 
       # Pre-release for master branch pushes
       - name: Pre-release
@@ -111,7 +114,7 @@ jobs:
           SHORT_SHA=$(echo $GITHUB_SHA | head -c 7)
           TAG="dev-${SHORT_SHA}"
           gh release delete "${TAG}" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "${TAG}" dist/* \
+          gh release create "${TAG}" release/* \
             --title "Dev Build ${SHORT_SHA}" \
             --notes "Automated pre-release from \`master\` branch.
 
@@ -125,6 +128,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ github.ref_name }}" dist/* \
+          gh release create "${{ github.ref_name }}" release/* \
             --title "${{ github.ref_name }}" \
             --generate-notes
