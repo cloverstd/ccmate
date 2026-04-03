@@ -54,7 +54,8 @@ export interface GitHubRepo {
 
 export interface LabelRuleConfig { label: string; trigger_mode: string }
 export interface RepoIssue { number: number; title: string; body: string; labels: string[]; state: string; user: string; created_at: string; updated_at: string }
-export interface RepoPR { number: number; title: string; body: string; state: string; user: string; html_url: string; head: string; base: string; created_at: string; updated_at: string }
+export interface CheckRun { name: string; status: string; conclusion: string }
+export interface RepoPR { number: number; title: string; body: string; state: string; mergeable?: boolean | null; user: string; html_url: string; head: string; base: string; check_status?: string; check_details?: CheckRun[]; created_at: string; updated_at: string }
 export interface PromptTemplate { id: number; name: string; system_prompt: string; task_prompt: string; is_builtin: boolean; project_id: number | null; created_at: string }
 export interface AgentProfile { id: number; provider: string; model: string; supports_image: boolean; supports_resume: boolean; config_json: string }
 

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import { tasksApi, projectsApi, type TaskStatus } from '../lib/api'
 import StatusBadge from '../components/StatusBadge'
-import { Card, CardHeader, CardContent, CardFooter, Label, Input, Select, Btn, Tag, EmptyState } from '../components/ui'
+import { Card, CardHeader, CardContent, CardFooter, Label, Input, Select, Btn, EmptyState } from '../components/ui'
 
 const statusOptions: (TaskStatus | '')[] = ['', 'queued', 'running', 'paused', 'waiting_user', 'succeeded', 'failed', 'cancelled']
 
@@ -27,14 +27,14 @@ export default function TaskListPage() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
         <h1 className="text-2xl font-bold">Tasks</h1>
         <div className="flex gap-2">
           <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="">All Status</option>
             {statusOptions.filter(Boolean).map((s) => <option key={s} value={s}>{s}</option>)}
           </Select>
-          <Btn onClick={() => setShowCreate(!showCreate)}>{showCreate ? 'Cancel' : 'New Task'}</Btn>
+          <Btn onClick={() => setShowCreate(!showCreate)}>{showCreate ? 'Cancel' : 'New'}</Btn>
         </div>
       </div>
 
@@ -74,13 +74,14 @@ export default function TaskListPage() {
             <div className="divide-y divide-gray-100">
               {tasks.map((task) => (
                 <Link key={task.id} to={`/tasks/${task.id}`}
-                  className="flex items-center gap-4 px-5 py-3 hover:bg-gray-50 transition-colors">
-                  <span className="text-sm font-semibold text-blue-600 w-16 shrink-0">#{task.id}</span>
-                  <span className="text-sm text-gray-700 truncate min-w-0 flex-1">{task.edges.project?.name || '-'}</span>
-                  <span className="text-sm text-gray-500 w-20 shrink-0">Issue #{task.issue_number}</span>
-                  <Tag color="gray">{task.type.replace('_', ' ')}</Tag>
-                  <StatusBadge status={task.status} />
-                  <span className="text-xs text-gray-400 w-36 shrink-0 text-right hidden sm:block">{new Date(task.created_at).toLocaleString()}</span>
+                  className="block px-4 py-3 hover:bg-gray-50 transition-colors">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-semibold text-blue-600">#{task.id}</span>
+                    <span className="text-sm text-gray-700 truncate">{task.edges.project?.name || '-'}</span>
+                    <span className="text-xs text-gray-500">Issue #{task.issue_number}</span>
+                    <StatusBadge status={task.status} />
+                    <span className="text-xs text-gray-400 ml-auto hidden sm:block">{new Date(task.created_at).toLocaleString()}</span>
+                  </div>
                 </Link>
               ))}
             </div>

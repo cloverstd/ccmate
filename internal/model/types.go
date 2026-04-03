@@ -134,16 +134,26 @@ type Comment struct {
 
 // PullRequest represents a pull request.
 type PullRequest struct {
-	Number    int       `json:"number"`
-	Title     string    `json:"title"`
-	Body      string    `json:"body"`
-	State     string    `json:"state"`
-	User      string    `json:"user"`
-	HTMLURL   string    `json:"html_url"`
-	Head      string    `json:"head"`
-	Base      string    `json:"base"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	Number       int          `json:"number"`
+	Title        string       `json:"title"`
+	Body         string       `json:"body"`
+	State        string       `json:"state"`
+	Mergeable    *bool        `json:"mergeable,omitempty"`
+	User         string       `json:"user"`
+	HTMLURL      string       `json:"html_url"`
+	Head         string       `json:"head"`
+	Base         string       `json:"base"`
+	CheckStatus  string       `json:"check_status,omitempty"`  // "success", "failure", "pending", "error", ""
+	CheckDetails []CheckRun   `json:"check_details,omitempty"` // individual check runs
+	CreatedAt    time.Time    `json:"created_at"`
+	UpdatedAt    time.Time    `json:"updated_at"`
+}
+
+// CheckRun represents a single CI check run on a PR.
+type CheckRun struct {
+	Name       string `json:"name"`
+	Status     string `json:"status"`     // "queued", "in_progress", "completed"
+	Conclusion string `json:"conclusion"` // "success", "failure", "neutral", etc.
 }
 
 // Review represents a PR review.

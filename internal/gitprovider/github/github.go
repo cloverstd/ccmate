@@ -349,12 +349,29 @@ func (p *Provider) GetPullRequest(ctx context.Context, repo model.RepoRef, prNum
 	if err != nil {
 		return nil, fmt.Errorf("getting PR: %w", err)
 	}
-	return &model.PullRequest{
+	result := &model.PullRequest{
 		Number: pr.GetNumber(), Title: pr.GetTitle(), Body: pr.GetBody(),
 		State: pr.GetState(), User: pr.GetUser().GetLogin(), HTMLURL: pr.GetHTMLURL(),
 		Head: pr.GetHead().GetRef(), Base: pr.GetBase().GetRef(),
+		Mergeable: pr.Mergeable,
 		CreatedAt: pr.GetCreatedAt().Time, UpdatedAt: pr.GetUpdatedAt().Time,
-	}, nil
+	}
+
+	// Fetch combined check status for the head SHA
+	if headSHA := pr.GetHead().GetSHA(); headSHA != "" {
+		if combined, _, err := p.client.Repositories.GetCombinedStatus(ctx, repo.Owner, repo.Name, headSHA, nil); err == nil {
+			result.CheckStatus = combined.GetState()
+		}
+		if checks, _, err := p.client.Checks.ListCheckRunsForRef(ctx, repo.Owner, repo.Name, headSHA, nil); err == nil {
+			for _, cr := range checks.CheckRuns {
+				result.CheckDetails = append(result.CheckDetails, model.CheckRun{
+					Name: cr.GetName(), Status: cr.GetStatus(), Conclusion: cr.GetConclusion(),
+				})
+			}
+		}
+	}
+
+	return result, nil
 }
 
 func (p *Provider) FindPullRequestByHead(ctx context.Context, repo model.RepoRef, head string) (*model.PullRequest, error) {

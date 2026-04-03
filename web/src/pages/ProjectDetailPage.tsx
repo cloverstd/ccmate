@@ -6,12 +6,14 @@ import PromptEditor from '../components/PromptEditor'
 import { projectsApi, tasksApi, promptsApi, modelsApi, type Project, type Task, type CommitInfo, type AgentProfile } from '../lib/api'
 import StatusBadge from '../components/StatusBadge'
 import { Card, CardHeader, CardContent, CardFooter, Label, Input, Select, Checkbox, Btn, Tag, EmptyState } from '../components/ui'
+import { useToast } from '../components/Toast'
 
 type Tab = 'info' | 'git' | 'issues' | 'tasks' | 'templates'
 
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
   const projectId = parseInt(id || '0')
+  const { toast } = useToast()
   const queryClient = useQueryClient()
   const location = useLocation()
   const navigate = useNavigate()
@@ -91,7 +93,7 @@ export default function ProjectDetailPage() {
   const createTaskForIssue = useMutation({
     mutationFn: (issueNumber: number) => tasksApi.create({ project_id: projectId, issue_number: issueNumber, agent_profile_id: taskAgentProfileID ? parseInt(taskAgentProfileID, 10) : undefined }),
     onSuccess: (task) => { queryClient.invalidateQueries({ queryKey: ['project-tasks'] }); navigate(`/tasks/${task.id}`) },
-    onError: (err) => { queryClient.invalidateQueries({ queryKey: ['project-tasks'] }); alert(err.message) },
+    onError: (err) => { queryClient.invalidateQueries({ queryKey: ['project-tasks'] }); toast(err.message, 'error') },
   })
 
   useEffect(() => {
@@ -145,7 +147,7 @@ export default function ProjectDetailPage() {
               </div>
               <div>
                 <Label>Default Branch</Label>
-                <Input value={projectForm.default_branch} onChange={(e) => setProjectForm({ ...projectForm, default_branch: e.target.value })} />
+                <p className="text-sm text-gray-700 font-mono mt-1">{project.default_branch}</p>
               </div>
               <div>
                 <Checkbox label={projectForm.auto_mode ? 'Automatic' : 'Manual'} checked={projectForm.auto_mode}
@@ -351,13 +353,13 @@ export default function ProjectDetailPage() {
             {tasksLoading ? <div className="py-8 text-center text-gray-400 text-sm">Loading...</div> : (
               <div className="divide-y divide-gray-100">
                 {(tasks as Task[])?.map((task) => (
-                  <Link key={task.id} to={`/tasks/${task.id}`} className="flex items-center gap-4 px-6 py-3 hover:bg-gray-50 transition-colors">
-                    <span className="text-sm font-medium text-blue-600">#{task.id}</span>
-                    <a href={`${project.repo_url}/issues/${task.issue_number}`} target="_blank" rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()} className="text-sm text-gray-500 hover:text-blue-600">Issue #{task.issue_number}</a>
-                    <Tag color="gray">{task.type}</Tag>
-                    <StatusBadge status={task.status} />
-                    <span className="text-xs text-gray-400 ml-auto">{new Date(task.created_at).toLocaleString()}</span>
+                  <Link key={task.id} to={`/tasks/${task.id}`} className="block px-4 py-3 hover:bg-gray-50 transition-colors">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium text-blue-600">#{task.id}</span>
+                      <span className="text-xs text-gray-500">Issue #{task.issue_number}</span>
+                      <StatusBadge status={task.status} />
+                      <span className="text-xs text-gray-400 ml-auto hidden sm:block">{new Date(task.created_at).toLocaleString()}</span>
+                    </div>
                   </Link>
                 ))}
                 {(!tasks || tasks.length === 0) && (

@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { settingsApi, modelsApi, authApi, promptsApi, type AgentProfile, type PromptTemplate } from '../lib/api'
 import PromptEditor from '../components/PromptEditor'
 import { Card, CardHeader, CardContent, CardFooter, Label, Input, Select, Checkbox, Btn, Tag, Alert, Separator } from '../components/ui'
+import { useToast } from '../components/Toast'
 
 function parseJSONArray<T>(val: string | undefined): T[] {
   if (!val) return []
@@ -15,6 +16,7 @@ function parseJSONArray<T>(val: string | undefined): T[] {
 
 export default function SettingsPage() {
   const queryClient = useQueryClient()
+  const { toast } = useToast()
   const { data: settings, isLoading } = useQuery({ queryKey: ['settings'], queryFn: settingsApi.get })
   const { data: models } = useQuery({ queryKey: ['models'], queryFn: modelsApi.list })
   const { data: globalTemplates } = useQuery({ queryKey: ['global-templates'], queryFn: () => promptsApi.list({ scope: 'global' }) })
@@ -429,7 +431,7 @@ export default function SettingsPage() {
             notify_base_url: form.notify_base_url || '', notify_enabled_statuses: form.notify_enabled_statuses || '[]',
             notify_telegram_enabled: form.notify_telegram_enabled || 'false', notify_telegram_bot_token: form.notify_telegram_bot_token || '', notify_telegram_chat_id: form.notify_telegram_chat_id || '',
           })}>Save Notifications</Btn>
-          <Btn variant="secondary" onClick={() => { settingsApi.testNotification().then(() => alert('Test sent!')).catch((e) => alert('Failed: ' + e.message)) }}>Test</Btn>
+          <Btn variant="secondary" onClick={() => { settingsApi.testNotification().then(() => toast('Test notification sent!', 'success')).catch((e) => toast('Test failed: ' + e.message, 'error')) }}>Test</Btn>
         </CardFooter>
       </Card>
 

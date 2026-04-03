@@ -5,18 +5,21 @@ import Markdown from '../components/Markdown'
 import { tasksApi, subscribeToTaskEvents, type TaskStatus, type SessionMessage, type SessionEvent, type RepoIssue, type RepoPR, type PromptSnapshot } from '../lib/api'
 import StatusBadge from '../components/StatusBadge'
 import { ToolCallView, ToolResultView, parseToolResult } from '../components/ToolView'
+import { Btn, Tag, Card, CardContent } from '../components/ui'
+import { useToast } from '../components/Toast'
 
 export default function TaskDetailPage() {
   const { id } = useParams<{ id: string }>()
   const taskId = parseInt(id || '0')
   const queryClient = useQueryClient()
+  const { toast } = useToast()
   const [activeTab, setActiveTab] = useState<'messages' | 'events' | 'issue' | 'pr'>('messages')
   const [messageInput, setMessageInput] = useState('')
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([])
   const [pendingMessages, setPendingMessages] = useState<SessionMessage[]>([])
   const [thinking, setThinking] = useState(false)
   const [showCompleteOptions, setShowCompleteOptions] = useState(false)
-  const [completeOptions, setCompleteOptions] = useState({ close_issue: true, merge_pr: false })
+  const [completeAction, setCompleteAction] = useState<'close_issue' | 'merge_pr'>('close_issue')
   const [headerCollapsed, setHeaderCollapsed] = useState(true)
   const endRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -59,8 +62,8 @@ export default function TaskDetailPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId] }),
   })
   const completeMutation = useMutation({
-    mutationFn: () => tasksApi.complete(taskId, completeOptions),
-    onSuccess: (data) => { queryClient.invalidateQueries({ queryKey: ['task', taskId] }); setShowCompleteOptions(false); alert(data.actions.join('\n')) },
+    mutationFn: () => tasksApi.complete(taskId, { close_issue: true, merge_pr: completeAction === 'merge_pr' }),
+    onSuccess: (data) => { queryClient.invalidateQueries({ queryKey: ['task', taskId] }); setShowCompleteOptions(false); toast(data.actions.join(', '), 'success') },
   })
   const pauseMutation = useMutation({ mutationFn: () => tasksApi.pause(taskId), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId] }) })
   const resumeMutation = useMutation({ mutationFn: () => tasksApi.resume(taskId), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId] }) })
@@ -90,7 +93,7 @@ export default function TaskDetailPage() {
     }
   }, [liveEvents, thinking])
 
-  if (isLoading) return <div className="py-8 text-center text-gray-400 text-sm">Loading...</div>
+  if (isLoading) return <TaskSkeleton />
   if (!task) return <div className="text-gray-500">Task not found</div>
 
   const sessions = task.edges.sessions || []
@@ -103,22 +106,20 @@ export default function TaskDetailPage() {
     <div className="flex flex-col h-full min-h-0">
       {/* Header — collapsible */}
       <div className="shrink-0">
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <div className="flex items-center gap-3 min-w-0">
-            <button onClick={() => setHeaderCollapsed(!headerCollapsed)} className="text-gray-400 hover:text-gray-600 shrink-0">
-              <svg className={`w-4 h-4 transition-transform ${headerCollapsed ? '' : 'rotate-90'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-            </button>
-            <h1 className="text-xl font-bold truncate">Task #{task.id}</h1>
-            <StatusBadge status={task.status} />
-            <span className="text-xs text-gray-500 hidden sm:inline">Issue #{task.issue_number} &middot; {task.type} &middot; <Link to={`/projects/${task.edges.project?.id}`} className="text-blue-600 hover:underline">{task.edges.project?.name}</Link></span>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {task.status === 'running' && <button onClick={() => pauseMutation.mutate()} disabled={pauseMutation.isPending} className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50">{pauseMutation.isPending ? 'Pausing...' : 'Pause'}</button>}
-            {task.status === 'paused' && <button onClick={() => resumeMutation.mutate()} disabled={resumeMutation.isPending} className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50">{resumeMutation.isPending ? 'Resuming...' : 'Resume'}</button>}
-            {task.status === 'failed' && <button onClick={() => retryMutation.mutate()} disabled={retryMutation.isPending} className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50">{retryMutation.isPending ? 'Retrying...' : 'Retry'}</button>}
-            {(taskActive || cancelMutation.isPending) && <button onClick={() => cancelMutation.mutate()} disabled={cancelMutation.isPending} className="px-3 py-1 text-sm border border-red-300 text-red-600 rounded hover:bg-red-50 disabled:opacity-50">{cancelMutation.isPending ? 'Cancelling...' : 'Cancel'}</button>}
+        <div className="flex flex-wrap items-center gap-2 mb-2">
+          <button onClick={() => setHeaderCollapsed(!headerCollapsed)} className="text-gray-400 hover:text-gray-600 shrink-0">
+            <svg className={`w-4 h-4 transition-transform ${headerCollapsed ? '' : 'rotate-90'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+          </button>
+          <h1 className="text-lg sm:text-xl font-bold truncate">Task #{task.id}</h1>
+          <StatusBadge status={task.status} />
+          <span className="text-xs text-gray-500 hidden sm:inline">Issue #{task.issue_number} &middot; {task.type} &middot; <Link to={`/projects/${task.edges.project?.id}`} className="text-blue-600 hover:underline">{task.edges.project?.name}</Link></span>
+          <div className="flex items-center gap-1.5 ml-auto shrink-0">
+            {task.status === 'running' && <Btn variant="secondary" size="sm" onClick={() => pauseMutation.mutate()} disabled={pauseMutation.isPending}>{pauseMutation.isPending ? '...' : 'Pause'}</Btn>}
+            {task.status === 'paused' && <Btn variant="secondary" size="sm" onClick={() => resumeMutation.mutate()} disabled={resumeMutation.isPending}>{resumeMutation.isPending ? '...' : 'Resume'}</Btn>}
+            {task.status === 'failed' && <Btn variant="secondary" size="sm" onClick={() => retryMutation.mutate()} disabled={retryMutation.isPending}>{retryMutation.isPending ? '...' : 'Retry'}</Btn>}
+            {(taskActive || cancelMutation.isPending) && <Btn variant="danger" size="sm" onClick={() => cancelMutation.mutate()} disabled={cancelMutation.isPending}>{cancelMutation.isPending ? '...' : 'Cancel'}</Btn>}
             {task.status === 'waiting_user' && (
-              <button onClick={() => setShowCompleteOptions((v) => !v)} className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700">Mark Complete</button>
+              <Btn size="sm" onClick={() => setShowCompleteOptions((v) => !v)} className="bg-green-600 hover:bg-green-700">Complete</Btn>
             )}
           </div>
         </div>
@@ -131,8 +132,8 @@ export default function TaskDetailPage() {
             {task.pr_number && <p className="text-sm text-gray-500">PR #{task.pr_number}</p>}
             {agentProfile && (
               <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="inline-flex items-center rounded-full bg-purple-50 px-2.5 py-1 text-purple-700 font-medium">{agentProfile.provider}</span>
-                <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-gray-700 font-mono">{agentProfile.model}</span>
+                <Tag color="purple">{agentProfile.provider}</Tag>
+                <Tag color="gray">{agentProfile.model}</Tag>
                 {agentProfile.supports_image && <span className="text-gray-400" title="Supports image">img</span>}
                 {agentProfile.supports_resume && <span className="text-gray-400" title="Supports resume">resume</span>}
               </div>
@@ -177,22 +178,28 @@ export default function TaskDetailPage() {
         )}
 
         {showCompleteOptions && (
-          <div className="mb-4 card">
-            <div className="text-sm font-medium mb-3">Completion Actions</div>
-            <label className="flex items-center gap-2 text-sm mb-2">
-              <input type="checkbox" checked={completeOptions.close_issue} onChange={(e) => setCompleteOptions((prev) => ({ ...prev, close_issue: e.target.checked }))} />
-              只关闭 Issue
-            </label>
-            <label className="flex items-center gap-2 text-sm mb-4">
-              <input type="checkbox" checked={completeOptions.merge_pr} onChange={(e) => setCompleteOptions((prev) => ({ ...prev, merge_pr: e.target.checked, close_issue: e.target.checked ? true : prev.close_issue }))} />
-              Merge PR 并关闭 Issue
-            </label>
-            <div className="flex gap-2">
-              <button onClick={() => completeMutation.mutate()} disabled={completeMutation.isPending || (!completeOptions.close_issue && !completeOptions.merge_pr)}
-                className="px-4 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:opacity-50">{completeMutation.isPending ? 'Completing...' : 'Confirm'}</button>
-              <button onClick={() => setShowCompleteOptions(false)} className="px-4 py-2 border rounded text-sm">Cancel</button>
-            </div>
-          </div>
+          <Card className="!mb-4">
+            <CardContent className="!py-4">
+              <p className="text-sm font-medium mb-3">Completion Actions</p>
+              <div className="space-y-2 mb-4">
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <input type="radio" name="complete-action" checked={completeAction === 'close_issue'} onChange={() => setCompleteAction('close_issue')}
+                    className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500/20" />
+                  <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">只关闭 Issue</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <input type="radio" name="complete-action" checked={completeAction === 'merge_pr'} onChange={() => setCompleteAction('merge_pr')}
+                    className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500/20" />
+                  <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">Merge PR 并关闭 Issue</span>
+                </label>
+              </div>
+              <div className="flex gap-2">
+                <Btn onClick={() => completeMutation.mutate()} disabled={completeMutation.isPending}
+                  className="bg-green-600 hover:bg-green-700">{completeMutation.isPending ? 'Completing...' : 'Confirm'}</Btn>
+                <Btn variant="secondary" onClick={() => setShowCompleteOptions(false)}>Cancel</Btn>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Tabs */}
@@ -216,7 +223,7 @@ export default function TaskDetailPage() {
       </div>
 
       {/* Content */}
-      <div className="card !p-0 overflow-hidden flex-1 min-h-0 flex flex-col mt-4">
+      <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden flex-1 min-h-0 flex flex-col mt-4">
         {activeTab === 'messages' ? (
           <MessagesTab historyMessages={historyMessages} liveEvents={liveEvents} thinking={thinking}
             taskActive={taskActive} canSend={canSend} messageInput={messageInput} setMessageInput={setMessageInput}
@@ -452,13 +459,13 @@ function MessagesTab({
         {grouped.map((item, i) => {
           if (item.kind === 'user') return <UserBubble key={`h-${i}`} msg={item.msg} />
           if (item.kind === 'message') return <MessageBubble key={`h-${i}`} msg={item.msg} />
-          return <ToolSectionView key={`h-${i}`} invocations={item.invocations} loading={item.loading} defaultCollapsed={!taskActive} taskActive={taskActive} />
+          return <ToolSectionView key={`h-${i}`} invocations={item.invocations} loading={item.loading} defaultCollapsed={true} taskActive={taskActive} />
         })}
 
         {groupedLive.map((item, i) => {
           if (item.kind === 'message') return <LiveMessageBubble key={`l-${i}`} event={item.event} />
           if (item.kind === 'status') return <LiveStatusBubble key={`l-${i}`} event={item.event} />
-          return <ToolSectionView key={`l-${i}`} invocations={item.invocations} loading={item.loading} defaultCollapsed={false} taskActive={true} />
+          return <ToolSectionView key={`l-${i}`} invocations={item.invocations} loading={item.loading} defaultCollapsed={true} taskActive={true} />
         })}
 
         {pendingMessages.map((msg) => <UserBubble key={`pending-${msg.id}`} msg={msg} />)}
@@ -482,13 +489,11 @@ function MessagesTab({
             <div className="flex gap-1.5 shrink-0">
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadMutation.mutate(f); e.target.value = '' }} />
-              <button onClick={() => fileInputRef.current?.click()} disabled={thinking}
-                className="p-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50" title="Upload image">📎</button>
-              <button onClick={() => messageInput.trim() && sendMutation.mutate(messageInput)}
-                disabled={!canSend || !messageInput.trim()}
-                className="p-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed" title="Send">
+              <Btn variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={thinking} className="!px-2">📎</Btn>
+              <Btn onClick={() => messageInput.trim() && sendMutation.mutate(messageInput)}
+                disabled={!canSend || !messageInput.trim()}>
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19V5m0 0l-7 7m7-7l7 7" /></svg>
-              </button>
+              </Btn>
             </div>
           </div>
         </div>
@@ -809,20 +814,21 @@ function EventsTab({ historyEvents, liveEvents, endRef, scrollContainerRef, isNe
 // ============================================================
 
 function IssueTab({ issue, repoUrl }: { issue?: RepoIssue; repoUrl?: string }) {
-  if (!issue) return <div className="p-6 text-sm text-gray-500">Issue data unavailable.</div>
+  if (!issue) return <div className="p-6 text-sm text-gray-400 text-center">Issue data unavailable.</div>
+  const stateColor = issue.state === 'open' ? 'green' : issue.state === 'closed' ? 'red' : 'gray'
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <a href={`${repoUrl}/issues/${issue.number}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">Issue #{issue.number}</a>
-        <span className="text-sm text-gray-500">by <a href={`https://github.com/${issue.user}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">@{issue.user}</a></span>
-        <span className="text-sm text-gray-500">Created {formatTimestamp(issue.created_at)}</span>
-        <span className="text-sm text-gray-500">Updated {formatTimestamp(issue.updated_at)}</span>
+    <div className="flex-1 min-h-0 p-6 space-y-4 overflow-y-auto">
+      <div className="flex flex-wrap items-center gap-2">
+        <a href={`${repoUrl}/issues/${issue.number}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium text-sm">Issue #{issue.number}</a>
+        <Tag color={stateColor}>{issue.state}</Tag>
+        <Tag color="gray">@{issue.user}</Tag>
+        <span className="text-xs text-gray-400">{formatTimestamp(issue.created_at)}</span>
       </div>
-      <h2 className="text-xl font-semibold">
+      <h2 className="text-lg font-semibold">
         <a href={`${repoUrl}/issues/${issue.number}`} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 hover:underline">{issue.title}</a>
       </h2>
-      <div className="flex flex-wrap gap-2">
-        {issue.labels?.map((label) => <span key={label} className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">{label}</span>)}
+      <div className="flex flex-wrap gap-1.5">
+        {issue.labels?.map((label) => <Tag key={label}>{label}</Tag>)}
       </div>
       <Markdown>{issue.body || '*No issue body*'}</Markdown>
     </div>
@@ -830,21 +836,78 @@ function IssueTab({ issue, repoUrl }: { issue?: RepoIssue; repoUrl?: string }) {
 }
 
 function PRTab({ pullRequest }: { pullRequest?: RepoPR }) {
-  if (!pullRequest) return <div className="p-6 text-sm text-gray-500">No PR associated with this task.</div>
+  if (!pullRequest) return <div className="p-6 text-sm text-gray-400 text-center">No PR associated with this task.</div>
+  const checkColor = pullRequest.check_status === 'success' ? 'green' : pullRequest.check_status === 'failure' ? 'red' : pullRequest.check_status === 'pending' ? 'yellow' : 'gray'
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <a href={pullRequest.html_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">PR #{pullRequest.number}</a>
-        {pullRequest.user && <span className="text-sm text-gray-500">by <a href={`https://github.com/${pullRequest.user}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">@{pullRequest.user}</a></span>}
-        <span className="text-sm text-gray-500">{pullRequest.head} {'->'} {pullRequest.base}</span>
-        <span className="text-sm text-gray-500">Created {formatTimestamp(pullRequest.created_at)}</span>
-        <span className="text-sm text-gray-500">Updated {formatTimestamp(pullRequest.updated_at)}</span>
+    <div className="flex-1 min-h-0 p-6 space-y-4 overflow-y-auto">
+      <div className="flex flex-wrap items-center gap-2">
+        <a href={pullRequest.html_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium text-sm">PR #{pullRequest.number}</a>
+        <Tag color={pullRequest.state === 'open' ? 'green' : pullRequest.state === 'closed' ? 'red' : 'gray'}>{pullRequest.state}</Tag>
+        {pullRequest.user && <Tag color="gray">@{pullRequest.user}</Tag>}
+        <Tag color="gray">{pullRequest.head} &rarr; {pullRequest.base}</Tag>
       </div>
-      <h2 className="text-xl font-semibold">
+      <h2 className="text-lg font-semibold">
         <a href={pullRequest.html_url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 hover:underline">{pullRequest.title}</a>
       </h2>
-      <div className="text-sm text-gray-500">State: {pullRequest.state}</div>
+
+      {/* Check status */}
+      {pullRequest.check_status && (
+        <div className="rounded-lg border border-gray-200 p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            {pullRequest.check_status === 'success' && <svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+            {pullRequest.check_status === 'failure' && <svg className="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>}
+            {pullRequest.check_status === 'pending' && <div className="w-4 h-4 border-2 border-yellow-300 border-t-yellow-500 rounded-full animate-spin" />}
+            <span className={`text-sm font-medium ${checkColor === 'green' ? 'text-green-700' : checkColor === 'red' ? 'text-red-700' : 'text-yellow-700'}`}>
+              {pullRequest.check_status === 'success' ? 'All checks have passed' : pullRequest.check_status === 'failure' ? 'Some checks failed' : pullRequest.check_status === 'pending' ? 'Checks in progress' : pullRequest.check_status}
+            </span>
+          </div>
+          {pullRequest.check_details && pullRequest.check_details.length > 0 && (
+            <div className="space-y-1 pl-6">
+              {pullRequest.check_details.map((cr, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs">
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cr.conclusion === 'success' ? 'bg-green-400' : cr.conclusion === 'failure' ? 'bg-red-400' : cr.status === 'in_progress' ? 'bg-yellow-400' : 'bg-gray-300'}`} />
+                  <span className="text-gray-700">{cr.name}</span>
+                  <span className="text-gray-400">{cr.conclusion || cr.status}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <Markdown>{pullRequest.body || '*No PR body*'}</Markdown>
+    </div>
+  )
+}
+
+// ============================================================
+// Skeleton
+// ============================================================
+
+function Skeleton({ className = '' }: { className?: string }) {
+  return <div className={`animate-pulse bg-gray-200 rounded ${className}`} />
+}
+
+function TaskSkeleton() {
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      <div className="shrink-0 mb-4">
+        <div className="flex items-center gap-3 mb-3">
+          <Skeleton className="h-6 w-28" />
+          <Skeleton className="h-5 w-16 rounded-full" />
+          <Skeleton className="h-4 w-40 hidden sm:block" />
+        </div>
+        <div className="flex gap-4 border-b border-gray-200 pb-2">
+          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-4 w-16" />)}
+        </div>
+      </div>
+      <div className="rounded-xl border border-gray-200 bg-white shadow-sm flex-1 min-h-0 flex flex-col p-4 space-y-3">
+        <Skeleton className="h-16 w-3/4 self-end rounded-lg" />
+        <Skeleton className="h-12 w-2/3 rounded-lg" />
+        <Skeleton className="h-8 w-full rounded-lg" />
+        <Skeleton className="h-12 w-3/4 rounded-lg" />
+        <Skeleton className="h-20 w-2/3 rounded-lg" />
+      </div>
     </div>
   )
 }
