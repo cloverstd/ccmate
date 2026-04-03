@@ -13,16 +13,18 @@ import (
 	"github.com/cloverstd/ccmate/internal/ent/webhookreceipt"
 	"github.com/cloverstd/ccmate/internal/gitprovider"
 	"github.com/cloverstd/ccmate/internal/model"
+	"github.com/cloverstd/ccmate/internal/settings"
 )
 
 // Processor handles normalized webhook events.
 type Processor struct {
 	client  *ent.Client
 	gitProv gitprovider.GitProvider
+	settingsMgr *settings.Manager
 }
 
-func NewProcessor(client *ent.Client, gitProv gitprovider.GitProvider) *Processor {
-	return &Processor{client: client, gitProv: gitProv}
+func NewProcessor(client *ent.Client, gitProv gitprovider.GitProvider, settingsMgr *settings.Manager) *Processor {
+	return &Processor{client: client, gitProv: gitProv, settingsMgr: settingsMgr}
 }
 
 // ProcessEvent handles a normalized event from any git provider.
@@ -70,19 +72,33 @@ func (p *Processor) handleIssueLabeled(ctx context.Context, event *model.Normali
 		return fmt.Errorf("finding project: %w", err)
 	}
 
+	// Check project-specific label rules first
+	triggerMode := ""
 	rule, err := p.client.ProjectLabelRule.Query().
 		Where(
 			projectlabelrule.HasProjectWith(project.ID(proj.ID)),
 			projectlabelrule.IssueLabel(event.Label),
 		).Only(ctx)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return nil
+	if err == nil {
+		triggerMode = string(rule.TriggerMode)
+	} else if ent.IsNotFound(err) {
+		// Fall back to global label rules from settings
+		globalRules := p.settingsMgr.GetLabelRules(ctx)
+		for _, gr := range globalRules {
+			if gr.Label == event.Label {
+				triggerMode = gr.TriggerMode
+				break
+			}
 		}
+	} else {
 		return fmt.Errorf("finding label rule: %w", err)
 	}
 
-	if rule.TriggerMode == projectlabelrule.TriggerModeManual && !proj.AutoMode {
+	if triggerMode == "" {
+		return nil // no matching rule
+	}
+
+	if triggerMode == "manual" && !proj.AutoMode {
 		return nil
 	}
 
@@ -96,11 +112,14 @@ func (p *Processor) handleIssueLabeled(ctx context.Context, event *model.Normali
 		return nil
 	}
 
-	_, err = p.client.Task.Create().
+	builder := p.client.Task.Create().
 		SetProject(proj).SetIssueNumber(event.IssueNumber).
 		SetType(enttask.TypeIssueImplementation).SetStatus(enttask.StatusQueued).
-		SetTriggerSource(string(model.TriggerSourceWebhook)).
-		Save(ctx)
+		SetTriggerSource(string(model.TriggerSourceWebhook))
+	if agentProfileID := p.resolveAutoAgentProfileID(ctx, proj); agentProfileID != nil {
+		builder = builder.SetAgentProfileID(*agentProfileID)
+	}
+	_, err = builder.Save(ctx)
 	if err != nil {
 		return fmt.Errorf("creating task: %w", err)
 	}
@@ -113,7 +132,7 @@ func (p *Processor) handleComment(ctx context.Context, event *model.NormalizedEv
 	if !strings.HasPrefix(strings.TrimSpace(event.CommentBody), "/ccmate") {
 		return nil
 	}
-	return ParseAndExecuteCommand(ctx, p.client, event, p.gitProv)
+	return ParseAndExecuteCommand(ctx, p.client, event, p.gitProv, p.settingsMgr)
 }
 
 func (p *Processor) handlePRReview(ctx context.Context, event *model.NormalizedEvent) error {
@@ -152,16 +171,34 @@ func (p *Processor) handlePRReview(ctx context.Context, event *model.NormalizedE
 	}
 
 	prNum := event.PRNumber
-	_, err = p.client.Task.Create().
+	builder := p.client.Task.Create().
 		SetProject(proj).SetIssueNumber(existingTask.IssueNumber).
 		SetNillablePrNumber(&prNum).
 		SetType(enttask.TypeReviewFix).SetStatus(enttask.StatusQueued).
-		SetTriggerSource(string(model.TriggerSourceWebhook)).
-		Save(ctx)
+		SetTriggerSource(string(model.TriggerSourceWebhook))
+	if agentProfileID := p.resolveAutoAgentProfileID(ctx, proj); agentProfileID != nil {
+		builder = builder.SetAgentProfileID(*agentProfileID)
+	}
+	_, err = builder.Save(ctx)
 	if err != nil {
 		return fmt.Errorf("creating review fix task: %w", err)
 	}
 
 	slog.Info("review fix task created", "pr", event.PRNumber)
+	return nil
+}
+
+func (p *Processor) resolveAutoAgentProfileID(ctx context.Context, proj *ent.Project) *int {
+	if proj.DefaultAgentProfileID != nil {
+		return proj.DefaultAgentProfileID
+	}
+	if p.settingsMgr == nil {
+		return nil
+	}
+	if fallback := p.settingsMgr.GetOptionalInt(ctx, settings.KeyDefaultAgentProfileID); fallback != nil {
+		if _, err := p.client.AgentProfile.Get(ctx, *fallback); err == nil {
+			return fallback
+		}
+	}
 	return nil
 }

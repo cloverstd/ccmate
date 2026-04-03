@@ -101,14 +101,27 @@ type RepoInfo struct {
 	Private       bool   `json:"private"`
 }
 
+type RepoBranch struct {
+	Name    string `json:"name"`
+	Hash    string `json:"hash"`
+	Message string `json:"message"`
+}
+
+type RepoTag struct {
+	Name string `json:"name"`
+	Hash string `json:"hash"`
+}
+
 // Issue represents an issue from a git provider.
 type Issue struct {
-	Number int      `json:"number"`
-	Title  string   `json:"title"`
-	Body   string   `json:"body"`
-	Labels []string `json:"labels"`
-	State  string   `json:"state"`
-	User   string   `json:"user"`
+	Number    int       `json:"number"`
+	Title     string    `json:"title"`
+	Body      string    `json:"body"`
+	Labels    []string  `json:"labels"`
+	State     string    `json:"state"`
+	User      string    `json:"user"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // Comment represents a comment on an issue or PR.
@@ -121,13 +134,16 @@ type Comment struct {
 
 // PullRequest represents a pull request.
 type PullRequest struct {
-	Number  int    `json:"number"`
-	Title   string `json:"title"`
-	Body    string `json:"body"`
-	State   string `json:"state"`
-	HTMLURL string `json:"html_url"`
-	Head    string `json:"head"`
-	Base    string `json:"base"`
+	Number    int       `json:"number"`
+	Title     string    `json:"title"`
+	Body      string    `json:"body"`
+	State     string    `json:"state"`
+	User      string    `json:"user"`
+	HTMLURL   string    `json:"html_url"`
+	Head      string    `json:"head"`
+	Base      string    `json:"base"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // Review represents a PR review.

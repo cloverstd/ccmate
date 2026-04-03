@@ -71,6 +71,8 @@ failed → queued (retry)
 
 React + TypeScript + Vite + Tailwind in `web/`. Built output embeds into Go binary via `//go:embed` in `internal/static/embed.go`. SPA fallback in `api/router.go` serves `index.html` for non-API routes.
 
+Mobile adaptation is the top priority for frontend work. Design mobile-first before desktop enhancement. Prefer stacked layouts on narrow screens, wrapping tab and action rows, touch-friendly spacing, and avoid wide-table assumptions without a clear phone fallback.
+
 ## Configuration
 
 YAML at project root (`config.yaml`), overridable by env vars with `CCMATE_` prefix (e.g., `CCMATE_SERVER_PORT=9090` → `server.port`). See `config.example.yaml` for all options. Config loaded by koanf in `internal/config/config.go`.

@@ -85,6 +85,33 @@ func (_u *PromptTemplateUpdate) SetNillableIsBuiltin(v *bool) *PromptTemplateUpd
 	return _u
 }
 
+// SetProjectID sets the "project_id" field.
+func (_u *PromptTemplateUpdate) SetProjectID(v int) *PromptTemplateUpdate {
+	_u.mutation.ResetProjectID()
+	_u.mutation.SetProjectID(v)
+	return _u
+}
+
+// SetNillableProjectID sets the "project_id" field if the given value is not nil.
+func (_u *PromptTemplateUpdate) SetNillableProjectID(v *int) *PromptTemplateUpdate {
+	if v != nil {
+		_u.SetProjectID(*v)
+	}
+	return _u
+}
+
+// AddProjectID adds value to the "project_id" field.
+func (_u *PromptTemplateUpdate) AddProjectID(v int) *PromptTemplateUpdate {
+	_u.mutation.AddProjectID(v)
+	return _u
+}
+
+// ClearProjectID clears the value of the "project_id" field.
+func (_u *PromptTemplateUpdate) ClearProjectID() *PromptTemplateUpdate {
+	_u.mutation.ClearProjectID()
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *PromptTemplateUpdate) SetUpdatedAt(v time.Time) *PromptTemplateUpdate {
 	_u.mutation.SetUpdatedAt(v)
@@ -201,6 +228,15 @@ func (_u *PromptTemplateUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if value, ok := _u.mutation.IsBuiltin(); ok {
 		_spec.SetField(prompttemplate.FieldIsBuiltin, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.ProjectID(); ok {
+		_spec.SetField(prompttemplate.FieldProjectID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedProjectID(); ok {
+		_spec.AddField(prompttemplate.FieldProjectID, field.TypeInt, value)
+	}
+	if _u.mutation.ProjectIDCleared() {
+		_spec.ClearField(prompttemplate.FieldProjectID, field.TypeInt)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(prompttemplate.FieldUpdatedAt, field.TypeTime, value)
@@ -323,6 +359,33 @@ func (_u *PromptTemplateUpdateOne) SetNillableIsBuiltin(v *bool) *PromptTemplate
 	if v != nil {
 		_u.SetIsBuiltin(*v)
 	}
+	return _u
+}
+
+// SetProjectID sets the "project_id" field.
+func (_u *PromptTemplateUpdateOne) SetProjectID(v int) *PromptTemplateUpdateOne {
+	_u.mutation.ResetProjectID()
+	_u.mutation.SetProjectID(v)
+	return _u
+}
+
+// SetNillableProjectID sets the "project_id" field if the given value is not nil.
+func (_u *PromptTemplateUpdateOne) SetNillableProjectID(v *int) *PromptTemplateUpdateOne {
+	if v != nil {
+		_u.SetProjectID(*v)
+	}
+	return _u
+}
+
+// AddProjectID adds value to the "project_id" field.
+func (_u *PromptTemplateUpdateOne) AddProjectID(v int) *PromptTemplateUpdateOne {
+	_u.mutation.AddProjectID(v)
+	return _u
+}
+
+// ClearProjectID clears the value of the "project_id" field.
+func (_u *PromptTemplateUpdateOne) ClearProjectID() *PromptTemplateUpdateOne {
+	_u.mutation.ClearProjectID()
 	return _u
 }
 
@@ -472,6 +535,15 @@ func (_u *PromptTemplateUpdateOne) sqlSave(ctx context.Context) (_node *PromptTe
 	}
 	if value, ok := _u.mutation.IsBuiltin(); ok {
 		_spec.SetField(prompttemplate.FieldIsBuiltin, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.ProjectID(); ok {
+		_spec.SetField(prompttemplate.FieldProjectID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedProjectID(); ok {
+		_spec.AddField(prompttemplate.FieldProjectID, field.TypeInt, value)
+	}
+	if _u.mutation.ProjectIDCleared() {
+		_spec.ClearField(prompttemplate.FieldProjectID, field.TypeInt)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(prompttemplate.FieldUpdatedAt, field.TypeTime, value)

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,6 +18,7 @@ import (
 	enttask "github.com/cloverstd/ccmate/internal/ent/task"
 	"github.com/cloverstd/ccmate/internal/gitprovider"
 	"github.com/cloverstd/ccmate/internal/model"
+	"github.com/cloverstd/ccmate/internal/runner"
 	"github.com/cloverstd/ccmate/internal/scheduler"
 	"github.com/cloverstd/ccmate/internal/settings"
 	"github.com/cloverstd/ccmate/internal/sse"
@@ -31,6 +33,12 @@ type TaskHandler struct {
 	sched       *scheduler.Scheduler
 	gitProv     gitprovider.GitProvider
 	settingsMgr *settings.Manager
+}
+
+type taskGitSummary struct {
+	Branch       string             `json:"branch"`
+	LatestCommit *runner.CommitInfo `json:"latest_commit,omitempty"`
+	Branches     []model.RepoBranch `json:"branches,omitempty"`
 }
 
 func NewTaskHandler(client *ent.Client, cfg *config.Config, broker *sse.Broker, sched *scheduler.Scheduler, gitProv gitprovider.GitProvider, settingsMgr *settings.Manager) *TaskHandler {
@@ -62,9 +70,10 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 type CreateTaskRequest struct {
-	ProjectID   int    `json:"project_id"`
-	IssueNumber int    `json:"issue_number"`
-	TaskType    string `json:"type"`
+	ProjectID      int    `json:"project_id"`
+	IssueNumber    int    `json:"issue_number"`
+	TaskType       string `json:"type"`
+	AgentProfileID *int   `json:"agent_profile_id"`
 }
 
 // Create manually creates a task for an issue (P1-06).
@@ -111,13 +120,22 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		taskType = enttask.TypeManualFollowup
 	}
 
-	t, err := h.client.Task.Create().
+	agentProfileID, err := h.resolveAgentProfileID(r.Context(), proj, req.AgentProfileID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+
+	builder := h.client.Task.Create().
 		SetProject(proj).
 		SetIssueNumber(req.IssueNumber).
 		SetType(taskType).
 		SetStatus(enttask.StatusQueued).
-		SetTriggerSource(string(model.TriggerSourceWeb)).
-		Save(r.Context())
+		SetTriggerSource(string(model.TriggerSourceWeb))
+	if agentProfileID != nil {
+		builder = builder.SetAgentProfileID(*agentProfileID)
+	}
+	t, err := builder.Save(r.Context())
 	if err != nil {
 		http.Error(w, `{"error":"failed to create task"}`, http.StatusInternalServerError)
 		return
@@ -127,10 +145,11 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 type CreateFromPromptRequest struct {
-	ProjectID int      `json:"project_id"`
-	Title     string   `json:"title"`
-	Body      string   `json:"body"`
-	Labels    []string `json:"labels"`
+	ProjectID      int      `json:"project_id"`
+	Title          string   `json:"title"`
+	Body           string   `json:"body"`
+	Labels         []string `json:"labels"`
+	AgentProfileID *int     `json:"agent_profile_id"`
 }
 
 // CreateFromPrompt creates a GitHub issue from the prompt, then creates a task for it.
@@ -167,22 +186,49 @@ func (h *TaskHandler) CreateFromPrompt(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create task for the new issue
-	t, err := h.client.Task.Create().
+	agentProfileID, err := h.resolveAgentProfileID(r.Context(), proj, req.AgentProfileID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+
+	builder := h.client.Task.Create().
 		SetProject(proj).
 		SetIssueNumber(issue.Number).
 		SetType(enttask.TypeIssueImplementation).
 		SetStatus(enttask.StatusQueued).
-		SetTriggerSource(string(model.TriggerSourceWeb)).
-		Save(r.Context())
+		SetTriggerSource(string(model.TriggerSourceWeb))
+	if agentProfileID != nil {
+		builder = builder.SetAgentProfileID(*agentProfileID)
+	}
+	t, err := builder.Save(r.Context())
 	if err != nil {
 		http.Error(w, `{"error":"failed to create task"}`, http.StatusInternalServerError)
 		return
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"issue":  issue,
-		"task":   t,
+		"issue": issue,
+		"task":  t,
 	})
+}
+
+func (h *TaskHandler) resolveAgentProfileID(ctx context.Context, proj *ent.Project, requested *int) (*int, error) {
+	if requested != nil {
+		if _, err := h.client.AgentProfile.Get(ctx, *requested); err != nil {
+			return nil, fmt.Errorf("agent profile not found")
+		}
+		return requested, nil
+	}
+	if proj.DefaultAgentProfileID != nil {
+		return proj.DefaultAgentProfileID, nil
+	}
+	if fallback := h.settingsMgr.GetOptionalInt(ctx, settings.KeyDefaultAgentProfileID); fallback != nil {
+		if _, err := h.client.AgentProfile.Get(ctx, *fallback); err == nil {
+			return fallback, nil
+		}
+	}
+	return nil, nil
 }
 
 func parseRepoURLFromString(url string) model.RepoRef {
@@ -209,6 +255,7 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 	t, err := h.client.Task.Query().
 		Where(enttask.ID(id)).
 		WithProject().
+		WithPromptSnapshot().
 		WithSessions(func(q *ent.SessionQuery) {
 			q.WithMessages()
 			q.WithEvents()
@@ -226,13 +273,79 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// Build response with extra fields
 	basePath := h.settingsMgr.GetWithDefault(r.Context(), settings.KeyStorageBasePath, "data")
 	var workspacePath string
+	var issue *model.Issue
+	var pr *model.PullRequest
+	var git *taskGitSummary
 	if t.Edges.Project != nil {
 		workspacePath = filepath.Join(basePath, "workspaces", fmt.Sprintf("%d", t.Edges.Project.ID), fmt.Sprintf("%d", t.ID), "repo")
+		repo := parseRepoURLFromString(t.Edges.Project.RepoURL)
+		if h.gitProv != nil && repo.Owner != "" {
+			issue, _ = h.gitProv.GetIssue(r.Context(), repo, t.IssueNumber)
+			if t.PrNumber != nil && *t.PrNumber > 0 {
+				pr, _ = h.gitProv.GetPullRequest(r.Context(), repo, *t.PrNumber)
+				// Fallback: build minimal PR info from task data if API fails
+				if pr == nil {
+					pr = &model.PullRequest{
+						Number:  *t.PrNumber,
+						HTMLURL: fmt.Sprintf("%s/pull/%d", t.Edges.Project.RepoURL, *t.PrNumber),
+						State:   "unknown",
+					}
+				}
+			}
+			if pr == nil {
+				// Try to find PR by branch name
+				ws := runner.NewWorkspace(filepath.Join(basePath, "workspaces"), t.Edges.Project.ID, t.ID)
+				branchName := ws.BranchName(t.IssueNumber)
+				pr, _ = h.gitProv.FindPullRequestByHead(r.Context(), repo, branchName)
+			}
+		} else if t.PrNumber != nil && *t.PrNumber > 0 && t.Edges.Project != nil {
+			// No git provider but we have pr_number — build link from repo URL
+			pr = &model.PullRequest{
+				Number:  *t.PrNumber,
+				HTMLURL: fmt.Sprintf("%s/pull/%d", t.Edges.Project.RepoURL, *t.PrNumber),
+				State:   "unknown",
+			}
+		}
+
+		ws := runner.NewWorkspace(filepath.Join(basePath, "workspaces"), t.Edges.Project.ID, t.ID)
+		expectedBranch := ws.BranchName(t.IssueNumber)
+		git = &taskGitSummary{Branch: expectedBranch}
+		if _, err := os.Stat(ws.RepoPath); err == nil {
+			// Fetch latest remote refs into local workspace
+			_ = runner.FetchProject(r.Context(), ws.RepoPath)
+			// Read actual current branch from local repo
+			if actual, err := runner.CurrentBranch(r.Context(), ws.RepoPath); err == nil && actual != "" {
+				git.Branch = actual
+			}
+			commits, err := runner.ListCommits(r.Context(), ws.RepoPath, "HEAD", 1)
+			if err == nil && len(commits) > 0 {
+				git.LatestCommit = &commits[0]
+			}
+			// List branches from local workspace (includes local + remote-tracking)
+			localBranches, err := runner.ListBranches(r.Context(), ws.RepoPath)
+			if err == nil {
+				gitBranches := make([]model.RepoBranch, len(localBranches))
+				for i, b := range localBranches {
+					gitBranches[i] = model.RepoBranch{Name: b.Name, Hash: b.Hash, Message: b.Message}
+				}
+				git.Branches = gitBranches
+			}
+		}
+	}
+
+	// Load agent profile if set
+	var agentProfile *ent.AgentProfile
+	if t.AgentProfileID != nil {
+		agentProfile, _ = h.client.AgentProfile.Get(r.Context(), *t.AgentProfileID)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"task":           t,
 		"workspace_path": workspacePath,
+		"issue":          issue,
+		"pull_request":   pr,
+		"git":            git,
+		"agent_profile":  agentProfile,
 	})
 }
 
@@ -272,9 +385,23 @@ func (h *TaskHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// Complete marks a task as done, closes the issue, and merges the PR if exists.
+type CompleteTaskRequest struct {
+	CloseIssue bool `json:"close_issue"`
+	MergePR    bool `json:"merge_pr"`
+}
+
+// Complete marks a task as done, closes the issue, and merges the PR if requested.
 func (h *TaskHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
+	var req CompleteTaskRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+	if !req.CloseIssue && !req.MergePR {
+		http.Error(w, `{"error":"select at least one completion action"}`, http.StatusBadRequest)
+		return
+	}
 
 	t, err := h.client.Task.Query().
 		Where(enttask.ID(id)).WithProject().Only(r.Context())
@@ -293,8 +420,12 @@ func (h *TaskHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var actions []string
 
-	// 1. Merge PR if exists
-	if t.PrNumber != nil && *t.PrNumber > 0 {
+	// 1. Merge PR if requested
+	if req.MergePR {
+		if t.PrNumber == nil || *t.PrNumber <= 0 {
+			http.Error(w, `{"error":"task has no PR to merge"}`, http.StatusBadRequest)
+			return
+		}
 		if err := h.gitProv.MergePullRequest(ctx, repo, *t.PrNumber); err != nil {
 			http.Error(w, fmt.Sprintf(`{"error":"failed to merge PR #%d: %s"}`, *t.PrNumber, err.Error()), http.StatusInternalServerError)
 			return
@@ -302,12 +433,14 @@ func (h *TaskHandler) Complete(w http.ResponseWriter, r *http.Request) {
 		actions = append(actions, fmt.Sprintf("PR #%d merged", *t.PrNumber))
 	}
 
-	// 2. Close issue
-	if err := h.gitProv.CloseIssue(ctx, repo, t.IssueNumber); err != nil {
-		http.Error(w, fmt.Sprintf(`{"error":"failed to close issue #%d: %s"}`, t.IssueNumber, err.Error()), http.StatusInternalServerError)
-		return
+	// 2. Close issue if requested or implied by merge.
+	if req.CloseIssue || req.MergePR {
+		if err := h.gitProv.CloseIssue(ctx, repo, t.IssueNumber); err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":"failed to close issue #%d: %s"}`, t.IssueNumber, err.Error()), http.StatusInternalServerError)
+			return
+		}
+		actions = append(actions, fmt.Sprintf("Issue #%d closed", t.IssueNumber))
 	}
-	actions = append(actions, fmt.Sprintf("Issue #%d closed", t.IssueNumber))
 
 	// 3. Mark task as succeeded
 	_, _ = h.client.Task.UpdateOneID(id).SetStatus(enttask.StatusSucceeded).Save(ctx)
@@ -365,15 +498,17 @@ func (h *TaskHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Forward message to running agent, or resume if not running
-	if t.Status == enttask.StatusWaitingUser || t.Status == enttask.StatusRunning {
+	if t.Status == enttask.StatusRunning {
 		_ = h.sched.HandleUserInput(r.Context(), id, model.AgentEvent{
 			Type:    model.AgentEventMessageDelta,
 			Payload: map[string]interface{}{"content": req.Content},
 		})
-	} else if t.Status == enttask.StatusPaused || t.Status == enttask.StatusFailed || t.Status == enttask.StatusSucceeded {
+	} else if t.Status == enttask.StatusWaitingUser || t.Status == enttask.StatusPaused || t.Status == enttask.StatusFailed || t.Status == enttask.StatusSucceeded {
 		// Resume the task with the new message
 		if err := h.sched.ResumeWithMessage(r.Context(), id, req.Content); err != nil {
 			slog.Warn("failed to resume task with message", "task_id", id, "error", err)
+			http.Error(w, fmt.Sprintf(`{"error":"failed to resume task: %s"}`, err.Error()), http.StatusBadRequest)
+			return
 		}
 	}
 

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"sync"
 
 	"github.com/cloverstd/ccmate/internal/ent"
@@ -17,6 +18,7 @@ import (
 const (
 	KeyInitialized       = "initialized"
 	KeySetupToken        = "setup_token"
+	KeyDefaultAgentProfileID = "default_agent_profile_id"
 	KeyGitHubClientID    = "github_client_id"
 	KeyGitHubClientSecret = "github_client_secret"
 	KeyGitHubCallbackURL = "github_callback_url"
@@ -33,11 +35,19 @@ const (
 	KeyMaxLogSizeMB      = "max_log_size_mb"
 	KeyMaxAttachmentMB   = "max_attachment_size_mb"
 	KeyStorageBasePath   = "storage_base_path"
-	KeyDebugMode         = "debug_mode"
+	KeyDefaultPromptTemplateID = "default_prompt_template_id"
+	KeyDebugMode               = "debug_mode"
 	KeyRPDisplayName     = "rp_display_name"
 	KeyRPID              = "rp_id"
 	KeyRPOrigins         = "rp_origins"           // JSON array
 	KeySessionKey        = "session_key"
+
+	// Notifications
+	KeyNotifyEnabledStatuses = "notify_enabled_statuses" // JSON array
+	KeyNotifyBaseURL         = "notify_base_url"
+	KeyNotifyTelegramEnabled  = "notify_telegram_enabled"
+	KeyNotifyTelegramBotToken = "notify_telegram_bot_token"
+	KeyNotifyTelegramChatID   = "notify_telegram_chat_id"
 )
 
 // Manager manages system settings in the database.
@@ -124,6 +134,18 @@ func (m *Manager) GetWithDefault(ctx context.Context, key, defaultVal string) st
 		return defaultVal
 	}
 	return v
+}
+
+func (m *Manager) GetOptionalInt(ctx context.Context, key string) *int {
+	v, err := m.Get(ctx, key)
+	if err != nil || v == "" {
+		return nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return nil
+	}
+	return &n
 }
 
 // Set stores a setting value.
@@ -305,11 +327,12 @@ func (m *Manager) GetLabelRules(ctx context.Context) []LabelRule {
 
 // SensitiveKeys lists keys whose values should be masked in API responses.
 var SensitiveKeys = map[string]bool{
-	KeyGitHubClientSecret:  true,
-	KeyGitHubPersonalToken: true,
-	KeySessionKey:          true,
-	KeySetupToken:          true,
-	KeyGitHubWebhookSecret: true,
+	KeyGitHubClientSecret:     true,
+	KeyGitHubPersonalToken:    true,
+	KeySessionKey:             true,
+	KeySetupToken:             true,
+	KeyGitHubWebhookSecret:    true,
+	KeyNotifyTelegramBotToken: true,
 }
 
 // GetAllSettings returns all settings as a map with sensitive values masked.

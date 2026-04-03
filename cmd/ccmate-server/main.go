@@ -15,6 +15,7 @@ import (
 
 	"github.com/cloverstd/ccmate/internal/agentprovider"
 	claudeagent "github.com/cloverstd/ccmate/internal/agentprovider/claudecode"
+	codexagent "github.com/cloverstd/ccmate/internal/agentprovider/codex"
 	mockagent "github.com/cloverstd/ccmate/internal/agentprovider/mock"
 	"github.com/cloverstd/ccmate/internal/api"
 	"github.com/cloverstd/ccmate/internal/auth"
@@ -22,6 +23,8 @@ import (
 	"github.com/cloverstd/ccmate/internal/ent"
 	"github.com/cloverstd/ccmate/internal/gitprovider"
 	ghprovider "github.com/cloverstd/ccmate/internal/gitprovider/github"
+	"github.com/cloverstd/ccmate/internal/notify"
+	tgnotify "github.com/cloverstd/ccmate/internal/notify/telegram"
 	"github.com/cloverstd/ccmate/internal/scheduler"
 	"github.com/cloverstd/ccmate/internal/settings"
 	"github.com/cloverstd/ccmate/internal/sse"
@@ -112,44 +115,31 @@ func main() {
 	apRegistry := agentprovider.NewRegistry()
 	apRegistry.Register(&mockagent.Factory{})
 	apRegistry.Register(&claudeagent.Factory{})
+	apRegistry.Register(&codexagent.Factory{})
 
 	debugMode := settingsMgr.GetWithDefault(ctx, settings.KeyDebugMode, "false")
-	var agentProv agentprovider.AgentAdapter
-
-	// Read agent provider config from DB
 	provJSON := settingsMgr.GetWithDefault(ctx, settings.KeyAgentProviders, "")
 	if provJSON != "" {
 		var providers []map[string]string
-		if err := json.Unmarshal([]byte(provJSON), &providers); err == nil && len(providers) > 0 {
-			p := providers[0]
-			if factory, ok := apRegistry.Get(p["name"]); ok {
-				agentProv, err = factory.Create(agentprovider.AgentConfig{
-					Binary: p["binary"],
-					Model:  p["model"],
-					Extra:  map[string]string{"debug": debugMode},
-				})
-				if err != nil {
-					slog.Warn("failed to create agent provider, falling back to mock", "name", p["name"], "error", err)
-				} else {
-					slog.Info("using agent provider", "name", p["name"], "binary", p["binary"], "debug", debugMode)
-				}
+		if err := json.Unmarshal([]byte(provJSON), &providers); err == nil {
+			for _, p := range providers {
+				slog.Info("configured agent provider", "name", p["name"], "binary", p["binary"], "debug", debugMode)
 			}
 		}
 	}
-	if agentProv == nil {
-		agentProv, _ = (&mockagent.Factory{}).Create(agentprovider.AgentConfig{
-			Extra: map[string]string{"debug": debugMode},
-		})
-		slog.Info("using mock agent provider (configure agent_providers in Settings to use Claude Code)")
-	}
+
+	// Notifications
+	notifyMgr := notify.NewManager(settingsMgr, client)
+	notifyMgr.RegisterProvider(tgnotify.New(settingsMgr))
 
 	// SSE + Scheduler
 	broker := sse.NewBroker()
 	sched := scheduler.New(client, settingsMgr, broker)
-	sched.SetProviders(gitProv, agentProv)
+	sched.SetProviders(gitProv, apRegistry)
+	sched.SetNotifyManager(notifyMgr)
 
 	// HTTP router
-	router := api.NewRouter(client, cfg, broker, sched, passkeySvc, gitProv, settingsMgr)
+	router := api.NewRouter(client, cfg, broker, sched, passkeySvc, gitProv, settingsMgr, notifyMgr)
 
 	srv := &http.Server{
 		Addr: cfg.Server.Addr(), Handler: router,
@@ -159,6 +149,7 @@ func main() {
 	schedCtx, schedCancel := context.WithCancel(ctx)
 	go sched.Run(schedCtx)
 	go scheduler.RunCleanup(schedCtx, client, settingsMgr)
+	go scheduler.RunIssueScanner(schedCtx, client, settingsMgr, gitProv)
 
 	go func() {
 		slog.Info("starting server", "addr", cfg.Server.Addr())
@@ -172,16 +163,35 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-quit
 	fmt.Println()
-	slog.Info("shutting down gracefully, waiting for running tasks to pause...", "signal", sig.String())
 
 	// Cancel scheduler (stops accepting new tasks, sends SIGINT to running agents)
 	schedCancel()
 
-	// Give agents time to save state (claude saves session automatically)
-	slog.Info("waiting for agents to finish (up to 15s)...")
-	time.Sleep(3 * time.Second)
+	runningCount := sched.RunningCount()
+	if runningCount > 0 {
+		slog.Info("waiting for running agents to finish...", "signal", sig.String(), "running", runningCount)
+		// Poll until agents finish or timeout
+		deadline := time.After(15 * time.Second)
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+	waitLoop:
+		for {
+			select {
+			case <-deadline:
+				slog.Warn("timeout waiting for agents, forcing shutdown", "remaining", sched.RunningCount())
+				break waitLoop
+			case <-ticker.C:
+				if sched.RunningCount() == 0 {
+					slog.Info("all agents finished")
+					break waitLoop
+				}
+			}
+		}
+	} else {
+		slog.Info("no running agents, shutting down immediately", "signal", sig.String())
+	}
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(ctx, 15*time.Second)
+	shutdownCtx, shutdownCancel := context.WithTimeout(ctx, 5*time.Second)
 	defer shutdownCancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		slog.Error("server shutdown error", "error", err)

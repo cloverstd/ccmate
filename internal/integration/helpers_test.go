@@ -6,5 +6,5 @@ import (
 
 // setupTestProcessor creates a webhook processor for testing (no git provider).
 func setupTestProcessor(env *testEnv) *webhook.Processor {
-	return webhook.NewProcessor(env.client, nil)
+	return webhook.NewProcessor(env.client, nil, env.settingsMgr)
 }

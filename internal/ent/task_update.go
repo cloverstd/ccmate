@@ -82,6 +82,33 @@ func (_u *TaskUpdate) ClearPrNumber() *TaskUpdate {
 	return _u
 }
 
+// SetAgentProfileID sets the "agent_profile_id" field.
+func (_u *TaskUpdate) SetAgentProfileID(v int) *TaskUpdate {
+	_u.mutation.ResetAgentProfileID()
+	_u.mutation.SetAgentProfileID(v)
+	return _u
+}
+
+// SetNillableAgentProfileID sets the "agent_profile_id" field if the given value is not nil.
+func (_u *TaskUpdate) SetNillableAgentProfileID(v *int) *TaskUpdate {
+	if v != nil {
+		_u.SetAgentProfileID(*v)
+	}
+	return _u
+}
+
+// AddAgentProfileID adds value to the "agent_profile_id" field.
+func (_u *TaskUpdate) AddAgentProfileID(v int) *TaskUpdate {
+	_u.mutation.AddAgentProfileID(v)
+	return _u
+}
+
+// ClearAgentProfileID clears the value of the "agent_profile_id" field.
+func (_u *TaskUpdate) ClearAgentProfileID() *TaskUpdate {
+	_u.mutation.ClearAgentProfileID()
+	return _u
+}
+
 // SetType sets the "type" field.
 func (_u *TaskUpdate) SetType(v task.Type) *TaskUpdate {
 	_u.mutation.SetType(v)
@@ -439,6 +466,15 @@ func (_u *TaskUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if _u.mutation.PrNumberCleared() {
 		_spec.ClearField(task.FieldPrNumber, field.TypeInt)
 	}
+	if value, ok := _u.mutation.AgentProfileID(); ok {
+		_spec.SetField(task.FieldAgentProfileID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedAgentProfileID(); ok {
+		_spec.AddField(task.FieldAgentProfileID, field.TypeInt, value)
+	}
+	if _u.mutation.AgentProfileIDCleared() {
+		_spec.ClearField(task.FieldAgentProfileID, field.TypeInt)
+	}
 	if value, ok := _u.mutation.GetType(); ok {
 		_spec.SetField(task.FieldType, field.TypeEnum, value)
 	}
@@ -753,6 +789,33 @@ func (_u *TaskUpdateOne) AddPrNumber(v int) *TaskUpdateOne {
 // ClearPrNumber clears the value of the "pr_number" field.
 func (_u *TaskUpdateOne) ClearPrNumber() *TaskUpdateOne {
 	_u.mutation.ClearPrNumber()
+	return _u
+}
+
+// SetAgentProfileID sets the "agent_profile_id" field.
+func (_u *TaskUpdateOne) SetAgentProfileID(v int) *TaskUpdateOne {
+	_u.mutation.ResetAgentProfileID()
+	_u.mutation.SetAgentProfileID(v)
+	return _u
+}
+
+// SetNillableAgentProfileID sets the "agent_profile_id" field if the given value is not nil.
+func (_u *TaskUpdateOne) SetNillableAgentProfileID(v *int) *TaskUpdateOne {
+	if v != nil {
+		_u.SetAgentProfileID(*v)
+	}
+	return _u
+}
+
+// AddAgentProfileID adds value to the "agent_profile_id" field.
+func (_u *TaskUpdateOne) AddAgentProfileID(v int) *TaskUpdateOne {
+	_u.mutation.AddAgentProfileID(v)
+	return _u
+}
+
+// ClearAgentProfileID clears the value of the "agent_profile_id" field.
+func (_u *TaskUpdateOne) ClearAgentProfileID() *TaskUpdateOne {
+	_u.mutation.ClearAgentProfileID()
 	return _u
 }
 
@@ -1142,6 +1205,15 @@ func (_u *TaskUpdateOne) sqlSave(ctx context.Context) (_node *Task, err error) {
 	}
 	if _u.mutation.PrNumberCleared() {
 		_spec.ClearField(task.FieldPrNumber, field.TypeInt)
+	}
+	if value, ok := _u.mutation.AgentProfileID(); ok {
+		_spec.SetField(task.FieldAgentProfileID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedAgentProfileID(); ok {
+		_spec.AddField(task.FieldAgentProfileID, field.TypeInt, value)
+	}
+	if _u.mutation.AgentProfileIDCleared() {
+		_spec.ClearField(task.FieldAgentProfileID, field.TypeInt)
 	}
 	if value, ok := _u.mutation.GetType(); ok {
 		_spec.SetField(task.FieldType, field.TypeEnum, value)

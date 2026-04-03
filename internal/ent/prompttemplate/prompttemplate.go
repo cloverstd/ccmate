@@ -22,6 +22,8 @@ const (
 	FieldTaskPrompt = "task_prompt"
 	// FieldIsBuiltin holds the string denoting the is_builtin field in the database.
 	FieldIsBuiltin = "is_builtin"
+	// FieldProjectID holds the string denoting the project_id field in the database.
+	FieldProjectID = "project_id"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -46,6 +48,7 @@ var Columns = []string{
 	FieldSystemPrompt,
 	FieldTaskPrompt,
 	FieldIsBuiltin,
+	FieldProjectID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
@@ -103,6 +106,11 @@ func ByTaskPrompt(opts ...sql.OrderTermOption) OrderOption {
 // ByIsBuiltin orders the results by the is_builtin field.
 func ByIsBuiltin(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldIsBuiltin, opts...).ToFunc()
+}
+
+// ByProjectID orders the results by the project_id field.
+func ByProjectID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldProjectID, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

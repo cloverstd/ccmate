@@ -76,6 +76,48 @@ func (_c *ProjectCreate) SetNillableAutoMode(v *bool) *ProjectCreate {
 	return _c
 }
 
+// SetDefaultAgentProfileID sets the "default_agent_profile_id" field.
+func (_c *ProjectCreate) SetDefaultAgentProfileID(v int) *ProjectCreate {
+	_c.mutation.SetDefaultAgentProfileID(v)
+	return _c
+}
+
+// SetNillableDefaultAgentProfileID sets the "default_agent_profile_id" field if the given value is not nil.
+func (_c *ProjectCreate) SetNillableDefaultAgentProfileID(v *int) *ProjectCreate {
+	if v != nil {
+		_c.SetDefaultAgentProfileID(*v)
+	}
+	return _c
+}
+
+// SetDefaultPromptTemplateID sets the "default_prompt_template_id" field.
+func (_c *ProjectCreate) SetDefaultPromptTemplateID(v int) *ProjectCreate {
+	_c.mutation.SetDefaultPromptTemplateID(v)
+	return _c
+}
+
+// SetNillableDefaultPromptTemplateID sets the "default_prompt_template_id" field if the given value is not nil.
+func (_c *ProjectCreate) SetNillableDefaultPromptTemplateID(v *int) *ProjectCreate {
+	if v != nil {
+		_c.SetDefaultPromptTemplateID(*v)
+	}
+	return _c
+}
+
+// SetPromptTemplateScope sets the "prompt_template_scope" field.
+func (_c *ProjectCreate) SetPromptTemplateScope(v project.PromptTemplateScope) *ProjectCreate {
+	_c.mutation.SetPromptTemplateScope(v)
+	return _c
+}
+
+// SetNillablePromptTemplateScope sets the "prompt_template_scope" field if the given value is not nil.
+func (_c *ProjectCreate) SetNillablePromptTemplateScope(v *project.PromptTemplateScope) *ProjectCreate {
+	if v != nil {
+		_c.SetPromptTemplateScope(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *ProjectCreate) SetCreatedAt(v time.Time) *ProjectCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -181,6 +223,10 @@ func (_c *ProjectCreate) defaults() {
 		v := project.DefaultAutoMode
 		_c.mutation.SetAutoMode(v)
 	}
+	if _, ok := _c.mutation.PromptTemplateScope(); !ok {
+		v := project.DefaultPromptTemplateScope
+		_c.mutation.SetPromptTemplateScope(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := project.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -217,6 +263,14 @@ func (_c *ProjectCreate) check() error {
 	}
 	if _, ok := _c.mutation.AutoMode(); !ok {
 		return &ValidationError{Name: "auto_mode", err: errors.New(`ent: missing required field "Project.auto_mode"`)}
+	}
+	if _, ok := _c.mutation.PromptTemplateScope(); !ok {
+		return &ValidationError{Name: "prompt_template_scope", err: errors.New(`ent: missing required field "Project.prompt_template_scope"`)}
+	}
+	if v, ok := _c.mutation.PromptTemplateScope(); ok {
+		if err := project.PromptTemplateScopeValidator(v); err != nil {
+			return &ValidationError{Name: "prompt_template_scope", err: fmt.Errorf(`ent: validator failed for field "Project.prompt_template_scope": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Project.created_at"`)}
@@ -269,6 +323,18 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.AutoMode(); ok {
 		_spec.SetField(project.FieldAutoMode, field.TypeBool, value)
 		_node.AutoMode = value
+	}
+	if value, ok := _c.mutation.DefaultAgentProfileID(); ok {
+		_spec.SetField(project.FieldDefaultAgentProfileID, field.TypeInt, value)
+		_node.DefaultAgentProfileID = &value
+	}
+	if value, ok := _c.mutation.DefaultPromptTemplateID(); ok {
+		_spec.SetField(project.FieldDefaultPromptTemplateID, field.TypeInt, value)
+		_node.DefaultPromptTemplateID = &value
+	}
+	if value, ok := _c.mutation.PromptTemplateScope(); ok {
+		_spec.SetField(project.FieldPromptTemplateScope, field.TypeEnum, value)
+		_node.PromptTemplateScope = value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(project.FieldCreatedAt, field.TypeTime, value)

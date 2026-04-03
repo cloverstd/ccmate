@@ -80,6 +80,16 @@ func AutoMode(v bool) predicate.Project {
 	return predicate.Project(sql.FieldEQ(FieldAutoMode, v))
 }
 
+// DefaultAgentProfileID applies equality check predicate on the "default_agent_profile_id" field. It's identical to DefaultAgentProfileIDEQ.
+func DefaultAgentProfileID(v int) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldDefaultAgentProfileID, v))
+}
+
+// DefaultPromptTemplateID applies equality check predicate on the "default_prompt_template_id" field. It's identical to DefaultPromptTemplateIDEQ.
+func DefaultPromptTemplateID(v int) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldDefaultPromptTemplateID, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.Project {
 	return predicate.Project(sql.FieldEQ(FieldCreatedAt, v))
@@ -358,6 +368,126 @@ func AutoModeEQ(v bool) predicate.Project {
 // AutoModeNEQ applies the NEQ predicate on the "auto_mode" field.
 func AutoModeNEQ(v bool) predicate.Project {
 	return predicate.Project(sql.FieldNEQ(FieldAutoMode, v))
+}
+
+// DefaultAgentProfileIDEQ applies the EQ predicate on the "default_agent_profile_id" field.
+func DefaultAgentProfileIDEQ(v int) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldDefaultAgentProfileID, v))
+}
+
+// DefaultAgentProfileIDNEQ applies the NEQ predicate on the "default_agent_profile_id" field.
+func DefaultAgentProfileIDNEQ(v int) predicate.Project {
+	return predicate.Project(sql.FieldNEQ(FieldDefaultAgentProfileID, v))
+}
+
+// DefaultAgentProfileIDIn applies the In predicate on the "default_agent_profile_id" field.
+func DefaultAgentProfileIDIn(vs ...int) predicate.Project {
+	return predicate.Project(sql.FieldIn(FieldDefaultAgentProfileID, vs...))
+}
+
+// DefaultAgentProfileIDNotIn applies the NotIn predicate on the "default_agent_profile_id" field.
+func DefaultAgentProfileIDNotIn(vs ...int) predicate.Project {
+	return predicate.Project(sql.FieldNotIn(FieldDefaultAgentProfileID, vs...))
+}
+
+// DefaultAgentProfileIDGT applies the GT predicate on the "default_agent_profile_id" field.
+func DefaultAgentProfileIDGT(v int) predicate.Project {
+	return predicate.Project(sql.FieldGT(FieldDefaultAgentProfileID, v))
+}
+
+// DefaultAgentProfileIDGTE applies the GTE predicate on the "default_agent_profile_id" field.
+func DefaultAgentProfileIDGTE(v int) predicate.Project {
+	return predicate.Project(sql.FieldGTE(FieldDefaultAgentProfileID, v))
+}
+
+// DefaultAgentProfileIDLT applies the LT predicate on the "default_agent_profile_id" field.
+func DefaultAgentProfileIDLT(v int) predicate.Project {
+	return predicate.Project(sql.FieldLT(FieldDefaultAgentProfileID, v))
+}
+
+// DefaultAgentProfileIDLTE applies the LTE predicate on the "default_agent_profile_id" field.
+func DefaultAgentProfileIDLTE(v int) predicate.Project {
+	return predicate.Project(sql.FieldLTE(FieldDefaultAgentProfileID, v))
+}
+
+// DefaultAgentProfileIDIsNil applies the IsNil predicate on the "default_agent_profile_id" field.
+func DefaultAgentProfileIDIsNil() predicate.Project {
+	return predicate.Project(sql.FieldIsNull(FieldDefaultAgentProfileID))
+}
+
+// DefaultAgentProfileIDNotNil applies the NotNil predicate on the "default_agent_profile_id" field.
+func DefaultAgentProfileIDNotNil() predicate.Project {
+	return predicate.Project(sql.FieldNotNull(FieldDefaultAgentProfileID))
+}
+
+// DefaultPromptTemplateIDEQ applies the EQ predicate on the "default_prompt_template_id" field.
+func DefaultPromptTemplateIDEQ(v int) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldDefaultPromptTemplateID, v))
+}
+
+// DefaultPromptTemplateIDNEQ applies the NEQ predicate on the "default_prompt_template_id" field.
+func DefaultPromptTemplateIDNEQ(v int) predicate.Project {
+	return predicate.Project(sql.FieldNEQ(FieldDefaultPromptTemplateID, v))
+}
+
+// DefaultPromptTemplateIDIn applies the In predicate on the "default_prompt_template_id" field.
+func DefaultPromptTemplateIDIn(vs ...int) predicate.Project {
+	return predicate.Project(sql.FieldIn(FieldDefaultPromptTemplateID, vs...))
+}
+
+// DefaultPromptTemplateIDNotIn applies the NotIn predicate on the "default_prompt_template_id" field.
+func DefaultPromptTemplateIDNotIn(vs ...int) predicate.Project {
+	return predicate.Project(sql.FieldNotIn(FieldDefaultPromptTemplateID, vs...))
+}
+
+// DefaultPromptTemplateIDGT applies the GT predicate on the "default_prompt_template_id" field.
+func DefaultPromptTemplateIDGT(v int) predicate.Project {
+	return predicate.Project(sql.FieldGT(FieldDefaultPromptTemplateID, v))
+}
+
+// DefaultPromptTemplateIDGTE applies the GTE predicate on the "default_prompt_template_id" field.
+func DefaultPromptTemplateIDGTE(v int) predicate.Project {
+	return predicate.Project(sql.FieldGTE(FieldDefaultPromptTemplateID, v))
+}
+
+// DefaultPromptTemplateIDLT applies the LT predicate on the "default_prompt_template_id" field.
+func DefaultPromptTemplateIDLT(v int) predicate.Project {
+	return predicate.Project(sql.FieldLT(FieldDefaultPromptTemplateID, v))
+}
+
+// DefaultPromptTemplateIDLTE applies the LTE predicate on the "default_prompt_template_id" field.
+func DefaultPromptTemplateIDLTE(v int) predicate.Project {
+	return predicate.Project(sql.FieldLTE(FieldDefaultPromptTemplateID, v))
+}
+
+// DefaultPromptTemplateIDIsNil applies the IsNil predicate on the "default_prompt_template_id" field.
+func DefaultPromptTemplateIDIsNil() predicate.Project {
+	return predicate.Project(sql.FieldIsNull(FieldDefaultPromptTemplateID))
+}
+
+// DefaultPromptTemplateIDNotNil applies the NotNil predicate on the "default_prompt_template_id" field.
+func DefaultPromptTemplateIDNotNil() predicate.Project {
+	return predicate.Project(sql.FieldNotNull(FieldDefaultPromptTemplateID))
+}
+
+// PromptTemplateScopeEQ applies the EQ predicate on the "prompt_template_scope" field.
+func PromptTemplateScopeEQ(v PromptTemplateScope) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldPromptTemplateScope, v))
+}
+
+// PromptTemplateScopeNEQ applies the NEQ predicate on the "prompt_template_scope" field.
+func PromptTemplateScopeNEQ(v PromptTemplateScope) predicate.Project {
+	return predicate.Project(sql.FieldNEQ(FieldPromptTemplateScope, v))
+}
+
+// PromptTemplateScopeIn applies the In predicate on the "prompt_template_scope" field.
+func PromptTemplateScopeIn(vs ...PromptTemplateScope) predicate.Project {
+	return predicate.Project(sql.FieldIn(FieldPromptTemplateScope, vs...))
+}
+
+// PromptTemplateScopeNotIn applies the NotIn predicate on the "prompt_template_scope" field.
+func PromptTemplateScopeNotIn(vs ...PromptTemplateScope) predicate.Project {
+	return predicate.Project(sql.FieldNotIn(FieldPromptTemplateScope, vs...))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

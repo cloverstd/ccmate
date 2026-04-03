@@ -50,6 +50,17 @@ func CloneProject(ctx context.Context, repoURL, destPath, token string) error {
 	return nil
 }
 
+// CurrentBranch returns the current checked-out branch name.
+func CurrentBranch(ctx context.Context, repoPath string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "branch", "--show-current")
+	cmd.Dir = repoPath
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 // FetchProject fetches latest from remote.
 func FetchProject(ctx context.Context, repoPath string) error {
 	cmd := exec.CommandContext(ctx, "git", "fetch", "--all", "--prune")

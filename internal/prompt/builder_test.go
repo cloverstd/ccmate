@@ -11,84 +11,82 @@ func TestBuildSystemPrompt(t *testing.T) {
 	b := NewBuilder()
 	prompt := b.BuildSystemPrompt()
 
-	// Must contain platform safety rules
-	if !strings.Contains(prompt, "Platform Rules") {
-		t.Error("system prompt missing platform rules")
-	}
-	if !strings.Contains(prompt, "ONLY work within the current task working directory") {
-		t.Error("system prompt missing workspace boundary rule")
-	}
-	if !strings.Contains(prompt, "must NOT read, print, upload") {
-		t.Error("system prompt missing secret protection rule")
+	if prompt != "" {
+		t.Error("system prompt should be empty when no system prompt is set")
 	}
 }
 
 func TestBuildSystemPromptWithProject(t *testing.T) {
-	b := NewBuilder().WithProjectPrompts("Use Go 1.21+", "Follow TDD")
+	b := NewBuilder().WithSystemPrompt("Use Go 1.21+")
 	prompt := b.BuildSystemPrompt()
 
-	if !strings.Contains(prompt, "Use Go 1.21+") {
-		t.Error("system prompt missing project system prompt")
+	if prompt != "Use Go 1.21+" {
+		t.Errorf("system prompt should be exactly the configured value, got: %s", prompt)
 	}
 }
 
-func TestBuildTaskPrompt(t *testing.T) {
-	b := NewBuilder()
+func TestBuildTaskPromptWithTemplate(t *testing.T) {
+	b := NewBuilder().
+		WithTaskPrompt("Focus on {{.RepoFullName}} issue #{{.IssueNumber}}").
+		WithTemplateVars(TemplateVars{
+			IssueNumber:  42,
+			RepoOwner:    "acme",
+			RepoName:     "app",
+			RepoFullName: "acme/app",
+		})
 
 	issue := &model.Issue{
-		Title:  "Add user authentication",
-		Body:   "We need to add login functionality",
-		Labels: []string{"feature", "auth"},
+		Number: 42,
+		Title:  "Test issue",
+		Body:   "Body",
 	}
 
-	comments := []model.Comment{
-		{User: "alice", Body: "Please use OAuth2"},
-		{User: "bot", Body: "/ccmate run"},
-	}
+	prompt := b.BuildTaskPrompt(issue, nil, "issue_implementation")
 
-	prompt := b.BuildTaskPrompt(issue, comments, "issue_implementation")
-
-	// Must contain UNTRUSTED_CONTEXT wrapping
-	if !strings.Contains(prompt, "<UNTRUSTED_CONTEXT") {
-		t.Error("task prompt missing UNTRUSTED_CONTEXT wrapper")
-	}
-	if !strings.Contains(prompt, "</UNTRUSTED_CONTEXT>") {
-		t.Error("task prompt missing UNTRUSTED_CONTEXT closing tag")
-	}
-
-	// Must contain issue data
-	if !strings.Contains(prompt, "Add user authentication") {
-		t.Error("task prompt missing issue title")
-	}
-
-	// Must contain non-command comments
-	if !strings.Contains(prompt, "Please use OAuth2") {
-		t.Error("task prompt missing regular comment")
-	}
-
-	// Must NOT include ccmate command comments
-	if strings.Contains(prompt, "/ccmate run") {
-		t.Error("task prompt should not include command comments")
+	if !strings.Contains(prompt, "Focus on acme/app issue #42") {
+		t.Error("task prompt template variables not rendered")
 	}
 }
 
-func TestBuildReviewFixPrompt(t *testing.T) {
+func TestBuildTaskPromptEmpty(t *testing.T) {
 	b := NewBuilder()
 
-	issue := &model.Issue{Title: "Fix bug", Body: "Something is broken"}
-	reviews := []model.Review{
-		{User: "reviewer", State: "changes_requested", Body: "Please fix the null check"},
-	}
+	issue := &model.Issue{Number: 1, Title: "Test", Body: "Body"}
+	prompt := b.BuildTaskPrompt(issue, nil, "issue_implementation")
 
-	prompt := b.BuildReviewFixPrompt(issue, reviews, "diff content here")
+	if prompt != "" {
+		t.Errorf("task prompt should be empty without template, got: %s", prompt)
+	}
+}
 
-	if !strings.Contains(prompt, "Address PR review feedback") {
-		t.Error("review fix prompt missing task description")
+func TestBuildTaskPromptOnlyTemplate(t *testing.T) {
+	b := NewBuilder().
+		WithTaskPrompt("Fix issue #{{.IssueNumber}}").
+		WithTemplateVars(TemplateVars{IssueNumber: 5})
+
+	issue := &model.Issue{Number: 5, Title: "Bug", Body: "Details"}
+	comments := []model.Comment{{User: "alice", Body: "info"}}
+	prompt := b.BuildTaskPrompt(issue, comments, "issue_implementation")
+
+	if prompt != "Fix issue #5" {
+		t.Errorf("expected only rendered template, got: %s", prompt)
 	}
-	if !strings.Contains(prompt, "Please fix the null check") {
-		t.Error("review fix prompt missing review content")
+	// Should NOT contain issue/comment data
+	if strings.Contains(prompt, "Bug") || strings.Contains(prompt, "info") {
+		t.Error("task prompt should not contain issue/comment data")
 	}
-	if !strings.Contains(prompt, "diff content here") {
-		t.Error("review fix prompt missing diff")
+}
+
+func TestBuildReviewFixPromptOnlyTemplate(t *testing.T) {
+	b := NewBuilder().
+		WithTaskPrompt("Review task").
+		WithTemplateVars(TemplateVars{})
+
+	issue := &model.Issue{Number: 1, Title: "Fix bug", Body: "Broken"}
+	reviews := []model.Review{{User: "r", State: "changes_requested", Body: "fix null"}}
+	prompt := b.BuildReviewFixPrompt(issue, reviews, "diff here")
+
+	if prompt != "Review task" {
+		t.Errorf("expected only rendered template, got: %s", prompt)
 	}
 }

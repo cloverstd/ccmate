@@ -238,6 +238,7 @@ func (p *Provider) GetIssue(ctx context.Context, repo model.RepoRef, issueNumber
 	return &model.Issue{
 		Number: issue.GetNumber(), Title: issue.GetTitle(), Body: issue.GetBody(),
 		Labels: labels, State: issue.GetState(), User: issue.GetUser().GetLogin(),
+		CreatedAt: issue.GetCreatedAt().Time, UpdatedAt: issue.GetUpdatedAt().Time,
 	}, nil
 }
 
@@ -249,6 +250,53 @@ func (p *Provider) ListIssueComments(ctx context.Context, repo model.RepoRef, is
 	result := make([]model.Comment, len(comments))
 	for i, c := range comments {
 		result[i] = model.Comment{ID: c.GetID(), Body: c.GetBody(), User: c.GetUser().GetLogin(), CreatedAt: c.GetCreatedAt().Time}
+	}
+	return result, nil
+}
+
+func (p *Provider) ListRepoBranches(ctx context.Context, repo model.RepoRef) ([]model.RepoBranch, error) {
+	branches, _, err := p.client.Repositories.ListBranches(ctx, repo.Owner, repo.Name, &gh.BranchListOptions{ListOptions: gh.ListOptions{PerPage: 100}})
+	if err != nil {
+		return nil, fmt.Errorf("listing branches: %w", err)
+	}
+
+	result := make([]model.RepoBranch, 0, len(branches))
+	for _, branch := range branches {
+		hash := branch.GetCommit().GetSHA()
+		message := ""
+		if hash != "" {
+			commit, _, err := p.client.Repositories.GetCommit(ctx, repo.Owner, repo.Name, hash, nil)
+			if err == nil && commit.Commit != nil && commit.Commit.Message != nil {
+				message = strings.Split(commit.GetCommit().GetMessage(), "\n")[0]
+			}
+		}
+		if len(hash) > 12 {
+			hash = hash[:12]
+		}
+		result = append(result, model.RepoBranch{
+			Name:    branch.GetName(),
+			Hash:    hash,
+			Message: message,
+		})
+	}
+	return result, nil
+}
+
+func (p *Provider) ListRepoTags(ctx context.Context, repo model.RepoRef) ([]model.RepoTag, error) {
+	tags, _, err := p.client.Repositories.ListTags(ctx, repo.Owner, repo.Name, &gh.ListOptions{PerPage: 100})
+	if err != nil {
+		return nil, fmt.Errorf("listing tags: %w", err)
+	}
+	result := make([]model.RepoTag, 0, len(tags))
+	for _, tag := range tags {
+		hash := tag.GetCommit().GetSHA()
+		if len(hash) > 12 {
+			hash = hash[:12]
+		}
+		result = append(result, model.RepoTag{
+			Name: tag.GetName(),
+			Hash: hash,
+		})
 	}
 	return result, nil
 }
@@ -290,8 +338,41 @@ func (p *Provider) CreatePullRequest(ctx context.Context, repo model.RepoRef, re
 	}
 	return &model.PullRequest{
 		Number: pr.GetNumber(), Title: pr.GetTitle(), Body: pr.GetBody(),
-		State: pr.GetState(), HTMLURL: pr.GetHTMLURL(),
+		State: pr.GetState(), User: pr.GetUser().GetLogin(), HTMLURL: pr.GetHTMLURL(),
 		Head: pr.GetHead().GetRef(), Base: pr.GetBase().GetRef(),
+		CreatedAt: pr.GetCreatedAt().Time, UpdatedAt: pr.GetUpdatedAt().Time,
+	}, nil
+}
+
+func (p *Provider) GetPullRequest(ctx context.Context, repo model.RepoRef, prNumber int) (*model.PullRequest, error) {
+	pr, _, err := p.client.PullRequests.Get(ctx, repo.Owner, repo.Name, prNumber)
+	if err != nil {
+		return nil, fmt.Errorf("getting PR: %w", err)
+	}
+	return &model.PullRequest{
+		Number: pr.GetNumber(), Title: pr.GetTitle(), Body: pr.GetBody(),
+		State: pr.GetState(), User: pr.GetUser().GetLogin(), HTMLURL: pr.GetHTMLURL(),
+		Head: pr.GetHead().GetRef(), Base: pr.GetBase().GetRef(),
+		CreatedAt: pr.GetCreatedAt().Time, UpdatedAt: pr.GetUpdatedAt().Time,
+	}, nil
+}
+
+func (p *Provider) FindPullRequestByHead(ctx context.Context, repo model.RepoRef, head string) (*model.PullRequest, error) {
+	prs, _, err := p.client.PullRequests.List(ctx, repo.Owner, repo.Name, &gh.PullRequestListOptions{
+		Head: repo.Owner + ":" + head, State: "all", ListOptions: gh.ListOptions{PerPage: 1},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("finding PR by head: %w", err)
+	}
+	if len(prs) == 0 {
+		return nil, nil
+	}
+	pr := prs[0]
+	return &model.PullRequest{
+		Number: pr.GetNumber(), Title: pr.GetTitle(), Body: pr.GetBody(),
+		State: pr.GetState(), User: pr.GetUser().GetLogin(), HTMLURL: pr.GetHTMLURL(),
+		Head: pr.GetHead().GetRef(), Base: pr.GetBase().GetRef(),
+		CreatedAt: pr.GetCreatedAt().Time, UpdatedAt: pr.GetUpdatedAt().Time,
 	}, nil
 }
 
@@ -355,6 +436,7 @@ func (p *Provider) ListRepoIssues(ctx context.Context, repo model.RepoRef) ([]mo
 		result = append(result, model.Issue{
 			Number: issue.GetNumber(), Title: issue.GetTitle(), Body: issue.GetBody(),
 			Labels: labels, State: issue.GetState(), User: issue.GetUser().GetLogin(),
+			CreatedAt: issue.GetCreatedAt().Time, UpdatedAt: issue.GetUpdatedAt().Time,
 		})
 	}
 	return result, nil
@@ -373,6 +455,7 @@ func (p *Provider) ListRepoPRs(ctx context.Context, repo model.RepoRef) ([]model
 			Number: pr.GetNumber(), Title: pr.GetTitle(), Body: pr.GetBody(),
 			State: pr.GetState(), HTMLURL: pr.GetHTMLURL(),
 			Head: pr.GetHead().GetRef(), Base: pr.GetBase().GetRef(),
+			CreatedAt: pr.GetCreatedAt().Time, UpdatedAt: pr.GetUpdatedAt().Time,
 		}
 	}
 	return result, nil
@@ -394,6 +477,7 @@ func (p *Provider) CreateIssue(ctx context.Context, repo model.RepoRef, title st
 	return &model.Issue{
 		Number: issue.GetNumber(), Title: issue.GetTitle(), Body: issue.GetBody(),
 		Labels: issueLabels, State: issue.GetState(), User: issue.GetUser().GetLogin(),
+		CreatedAt: issue.GetCreatedAt().Time, UpdatedAt: issue.GetUpdatedAt().Time,
 	}, nil
 }
 

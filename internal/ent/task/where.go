@@ -65,6 +65,11 @@ func PrNumber(v int) predicate.Task {
 	return predicate.Task(sql.FieldEQ(FieldPrNumber, v))
 }
 
+// AgentProfileID applies equality check predicate on the "agent_profile_id" field. It's identical to AgentProfileIDEQ.
+func AgentProfileID(v int) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldAgentProfileID, v))
+}
+
 // Priority applies equality check predicate on the "priority" field. It's identical to PriorityEQ.
 func Priority(v int) predicate.Task {
 	return predicate.Task(sql.FieldEQ(FieldPriority, v))
@@ -178,6 +183,56 @@ func PrNumberIsNil() predicate.Task {
 // PrNumberNotNil applies the NotNil predicate on the "pr_number" field.
 func PrNumberNotNil() predicate.Task {
 	return predicate.Task(sql.FieldNotNull(FieldPrNumber))
+}
+
+// AgentProfileIDEQ applies the EQ predicate on the "agent_profile_id" field.
+func AgentProfileIDEQ(v int) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldAgentProfileID, v))
+}
+
+// AgentProfileIDNEQ applies the NEQ predicate on the "agent_profile_id" field.
+func AgentProfileIDNEQ(v int) predicate.Task {
+	return predicate.Task(sql.FieldNEQ(FieldAgentProfileID, v))
+}
+
+// AgentProfileIDIn applies the In predicate on the "agent_profile_id" field.
+func AgentProfileIDIn(vs ...int) predicate.Task {
+	return predicate.Task(sql.FieldIn(FieldAgentProfileID, vs...))
+}
+
+// AgentProfileIDNotIn applies the NotIn predicate on the "agent_profile_id" field.
+func AgentProfileIDNotIn(vs ...int) predicate.Task {
+	return predicate.Task(sql.FieldNotIn(FieldAgentProfileID, vs...))
+}
+
+// AgentProfileIDGT applies the GT predicate on the "agent_profile_id" field.
+func AgentProfileIDGT(v int) predicate.Task {
+	return predicate.Task(sql.FieldGT(FieldAgentProfileID, v))
+}
+
+// AgentProfileIDGTE applies the GTE predicate on the "agent_profile_id" field.
+func AgentProfileIDGTE(v int) predicate.Task {
+	return predicate.Task(sql.FieldGTE(FieldAgentProfileID, v))
+}
+
+// AgentProfileIDLT applies the LT predicate on the "agent_profile_id" field.
+func AgentProfileIDLT(v int) predicate.Task {
+	return predicate.Task(sql.FieldLT(FieldAgentProfileID, v))
+}
+
+// AgentProfileIDLTE applies the LTE predicate on the "agent_profile_id" field.
+func AgentProfileIDLTE(v int) predicate.Task {
+	return predicate.Task(sql.FieldLTE(FieldAgentProfileID, v))
+}
+
+// AgentProfileIDIsNil applies the IsNil predicate on the "agent_profile_id" field.
+func AgentProfileIDIsNil() predicate.Task {
+	return predicate.Task(sql.FieldIsNull(FieldAgentProfileID))
+}
+
+// AgentProfileIDNotNil applies the NotNil predicate on the "agent_profile_id" field.
+func AgentProfileIDNotNil() predicate.Task {
+	return predicate.Task(sql.FieldNotNull(FieldAgentProfileID))
 }
 
 // TypeEQ applies the EQ predicate on the "type" field.

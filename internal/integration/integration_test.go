@@ -67,10 +67,10 @@ func setupTestEnv(t *testing.T) *testEnv {
 		t.Fatal(err)
 	}
 
-	mockAgent, _ := (&mockagent.Factory{}).Create(agentprovider.AgentConfig{})
-
 	sched := scheduler.New(client, settingsMgr, broker)
-	sched.SetProviders(nil, mockAgent)
+	registry := agentprovider.NewRegistry()
+	registry.Register(&mockagent.Factory{})
+	sched.SetProviders(nil, registry)
 
 	router := api.NewRouter(client, cfg, broker, sched, passkeySvc, nil, settingsMgr)
 

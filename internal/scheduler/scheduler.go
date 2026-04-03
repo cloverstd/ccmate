@@ -14,6 +14,7 @@ import (
 	enttask "github.com/cloverstd/ccmate/internal/ent/task"
 	"github.com/cloverstd/ccmate/internal/gitprovider"
 	"github.com/cloverstd/ccmate/internal/model"
+	"github.com/cloverstd/ccmate/internal/notify"
 	"github.com/cloverstd/ccmate/internal/runner"
 	"github.com/cloverstd/ccmate/internal/settings"
 	"github.com/cloverstd/ccmate/internal/sse"
@@ -21,15 +22,21 @@ import (
 
 // Scheduler manages task scheduling, concurrency control, and lifecycle.
 type Scheduler struct {
-	client       *ent.Client
-	settingsMgr  *settings.Manager
-	broker       *sse.Broker
-	gitProvider  gitprovider.GitProvider
-	agentAdapter agentprovider.AgentAdapter
+	client        *ent.Client
+	settingsMgr   *settings.Manager
+	broker        *sse.Broker
+	gitProvider   gitprovider.GitProvider
+	agentRegistry *agentprovider.Registry
+	notifyMgr     *notify.Manager
 
 	mu             sync.Mutex
 	running        map[int]context.CancelFunc
-	runningHandles map[int]*agentprovider.SessionHandle
+	runningHandles map[int]runningAgent
+}
+
+type runningAgent struct {
+	adapter agentprovider.AgentAdapter
+	handle  *agentprovider.SessionHandle
 }
 
 func New(client *ent.Client, settingsMgr *settings.Manager, broker *sse.Broker) *Scheduler {
@@ -38,14 +45,35 @@ func New(client *ent.Client, settingsMgr *settings.Manager, broker *sse.Broker) 
 		settingsMgr:    settingsMgr,
 		broker:         broker,
 		running:        make(map[int]context.CancelFunc),
-		runningHandles: make(map[int]*agentprovider.SessionHandle),
+		runningHandles: make(map[int]runningAgent),
 	}
 }
 
 // SetProviders configures the git and agent providers for task execution.
-func (s *Scheduler) SetProviders(gp gitprovider.GitProvider, aa agentprovider.AgentAdapter) {
+func (s *Scheduler) SetProviders(gp gitprovider.GitProvider, ar *agentprovider.Registry) {
 	s.gitProvider = gp
-	s.agentAdapter = aa
+	s.agentRegistry = ar
+}
+
+// SetNotifyManager sets the notification manager.
+func (s *Scheduler) SetNotifyManager(nm *notify.Manager) {
+	s.notifyMgr = nm
+}
+
+// transitionAndNotify wraps TransitionTask with notification dispatch.
+func (s *Scheduler) transitionAndNotify(ctx context.Context, taskID int, from, to model.TaskStatus) error {
+	err := TransitionTask(ctx, s.client, taskID, from, to)
+	if err == nil && s.notifyMgr != nil {
+		s.notifyMgr.OnStatusChange(ctx, taskID, string(from), string(to))
+	}
+	return err
+}
+
+// RunningCount returns the number of currently running agents.
+func (s *Scheduler) RunningCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.running)
 }
 
 // Run starts the scheduler loop.
@@ -101,7 +129,7 @@ func (s *Scheduler) tick(ctx context.Context) {
 		}
 
 		// Transition to running and start execution
-		err = TransitionTask(ctx, s.client, t.ID, model.TaskStatusQueued, model.TaskStatusRunning)
+		err = s.transitionAndNotify(ctx, t.ID, model.TaskStatusQueued, model.TaskStatusRunning)
 		if err != nil {
 			slog.Error("failed to transition task", "task_id", t.ID, "error", err)
 			continue
@@ -131,7 +159,7 @@ func (s *Scheduler) startTask(parentCtx context.Context, taskID int) {
 			cancel()
 		}()
 
-		if s.gitProvider == nil || s.agentAdapter == nil {
+		if s.gitProvider == nil || s.agentRegistry == nil {
 			slog.Error("providers not configured, cannot run task", "task_id", taskID)
 			_, _ = s.client.Task.UpdateOneID(taskID).
 				SetStatus(enttask.StatusFailed).
@@ -139,11 +167,16 @@ func (s *Scheduler) startTask(parentCtx context.Context, taskID int) {
 			return
 		}
 
-		r := runner.New(s.client, s.settingsMgr, s.broker, s.gitProvider, s.agentAdapter)
-		r.OnHandleReady = func(h *agentprovider.SessionHandle) {
+		r := runner.New(s.client, s.settingsMgr, s.broker, s.gitProvider, s.agentRegistry)
+		r.OnHandleReady = func(adapter agentprovider.AgentAdapter, h *agentprovider.SessionHandle) {
 			s.mu.Lock()
-			s.runningHandles[taskID] = h
+			s.runningHandles[taskID] = runningAgent{adapter: adapter, handle: h}
 			s.mu.Unlock()
+		}
+		if s.notifyMgr != nil {
+			r.OnStatusChange = func(ctx context.Context, tid int, oldStatus, newStatus string) {
+				s.notifyMgr.OnStatusChange(ctx, tid, oldStatus, newStatus)
+			}
 		}
 		if err := r.RunTask(taskCtx, taskID); err != nil {
 			slog.Error("task execution failed", "task_id", taskID, "error", err)
@@ -196,7 +229,7 @@ func (s *Scheduler) PauseTask(ctx context.Context, taskID int) error {
 	// Save session snapshot before pausing
 	s.saveSessionSnapshot(ctx, taskID)
 
-	err := TransitionTask(ctx, s.client, taskID, model.TaskStatusRunning, model.TaskStatusPaused)
+	err := s.transitionAndNotify(ctx, taskID, model.TaskStatusRunning, model.TaskStatusPaused)
 	if err != nil {
 		return err
 	}
@@ -236,12 +269,12 @@ func (s *Scheduler) saveSessionSnapshot(ctx context.Context, taskID int) {
 
 // ResumeTask transitions a paused task back to queued.
 func (s *Scheduler) ResumeTask(ctx context.Context, taskID int) error {
-	return TransitionTask(ctx, s.client, taskID, model.TaskStatusPaused, model.TaskStatusQueued)
+	return s.transitionAndNotify(ctx, taskID, model.TaskStatusPaused, model.TaskStatusQueued)
 }
 
 // RetryTask transitions a failed task back to queued.
 func (s *Scheduler) RetryTask(ctx context.Context, taskID int) error {
-	return TransitionTask(ctx, s.client, taskID, model.TaskStatusFailed, model.TaskStatusQueued)
+	return s.transitionAndNotify(ctx, taskID, model.TaskStatusFailed, model.TaskStatusQueued)
 }
 
 // CancelTask cancels a task.
@@ -262,9 +295,13 @@ func (s *Scheduler) CancelTask(ctx context.Context, taskID int) error {
 	}
 	s.mu.Unlock()
 
+	oldStatus := t.Status.String()
 	_, err = s.client.Task.UpdateOneID(taskID).
 		SetStatus(enttask.StatusCancelled).
 		Save(ctx)
+	if err == nil && s.notifyMgr != nil {
+		s.notifyMgr.OnStatusChange(ctx, taskID, oldStatus, string(model.TaskStatusCancelled))
+	}
 	return err
 }
 
@@ -295,22 +332,13 @@ func (s *Scheduler) ResumeWithMessage(ctx context.Context, taskID int, message s
 
 	// Transition to queued (allow from any terminal/paused state)
 	currentStatus := model.TaskStatus(t.Status.String())
-	if currentStatus == model.TaskStatusPaused || currentStatus == model.TaskStatusFailed {
-		TransitionTask(ctx, s.client, taskID, currentStatus, model.TaskStatusQueued)
+	if currentStatus == model.TaskStatusPaused || currentStatus == model.TaskStatusFailed || currentStatus == model.TaskStatusWaitingUser {
+		if err := s.transitionAndNotify(ctx, taskID, currentStatus, model.TaskStatusQueued); err != nil {
+			return fmt.Errorf("re-queueing task: %w", err)
+		}
 	} else if currentStatus == model.TaskStatusSucceeded {
 		// For succeeded tasks, directly set to queued
 		_, _ = s.client.Task.UpdateOneID(taskID).SetStatus(enttask.StatusQueued).Save(ctx)
-	}
-
-	// Store the resume info so the runner can use it
-	// We use a convention: store message + session key in a pending user message
-	if t.CurrentSessionID != nil {
-		_, _ = s.client.SessionMessage.Create().
-			SetSessionID(*t.CurrentSessionID).
-			SetRole("user").
-			SetContentType("text").
-			SetContent(message).
-			Save(ctx)
 	}
 
 	// The scheduler tick will pick up the queued task and start it
@@ -322,13 +350,13 @@ func (s *Scheduler) ResumeWithMessage(ctx context.Context, taskID int, message s
 func (s *Scheduler) HandleUserInput(ctx context.Context, taskID int, event model.AgentEvent) error {
 	// Try to forward message to agent
 	s.mu.Lock()
-	handle, hasHandle := s.runningHandles[taskID]
+	running, hasHandle := s.runningHandles[taskID]
 	s.mu.Unlock()
 
-	if hasHandle && s.agentAdapter != nil {
+	if hasHandle && running.adapter != nil && running.handle != nil {
 		content, _ := event.Payload["content"].(string)
 		if content != "" {
-			if err := s.agentAdapter.SendInput(ctx, handle, agentprovider.UserInput{Text: content}); err != nil {
+			if err := running.adapter.SendInput(ctx, running.handle, agentprovider.UserInput{Text: content}); err != nil {
 				slog.Warn("failed to send input to agent", "task_id", taskID, "error", err)
 			}
 		}

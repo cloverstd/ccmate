@@ -46,6 +46,20 @@ func (_c *TaskCreate) SetNillablePrNumber(v *int) *TaskCreate {
 	return _c
 }
 
+// SetAgentProfileID sets the "agent_profile_id" field.
+func (_c *TaskCreate) SetAgentProfileID(v int) *TaskCreate {
+	_c.mutation.SetAgentProfileID(v)
+	return _c
+}
+
+// SetNillableAgentProfileID sets the "agent_profile_id" field if the given value is not nil.
+func (_c *TaskCreate) SetNillableAgentProfileID(v *int) *TaskCreate {
+	if v != nil {
+		_c.SetAgentProfileID(*v)
+	}
+	return _c
+}
+
 // SetType sets the "type" field.
 func (_c *TaskCreate) SetType(v task.Type) *TaskCreate {
 	_c.mutation.SetType(v)
@@ -356,6 +370,10 @@ func (_c *TaskCreate) createSpec() (*Task, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.PrNumber(); ok {
 		_spec.SetField(task.FieldPrNumber, field.TypeInt, value)
 		_node.PrNumber = &value
+	}
+	if value, ok := _c.mutation.AgentProfileID(); ok {
+		_spec.SetField(task.FieldAgentProfileID, field.TypeInt, value)
+		_node.AgentProfileID = &value
 	}
 	if value, ok := _c.mutation.GetType(); ok {
 		_spec.SetField(task.FieldType, field.TypeEnum, value)

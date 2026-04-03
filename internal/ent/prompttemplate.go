@@ -25,6 +25,8 @@ type PromptTemplate struct {
 	TaskPrompt string `json:"task_prompt,omitempty"`
 	// IsBuiltin holds the value of the "is_builtin" field.
 	IsBuiltin bool `json:"is_builtin,omitempty"`
+	// ProjectID holds the value of the "project_id" field.
+	ProjectID *int `json:"project_id,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -60,7 +62,7 @@ func (*PromptTemplate) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case prompttemplate.FieldIsBuiltin:
 			values[i] = new(sql.NullBool)
-		case prompttemplate.FieldID:
+		case prompttemplate.FieldID, prompttemplate.FieldProjectID:
 			values[i] = new(sql.NullInt64)
 		case prompttemplate.FieldName, prompttemplate.FieldSystemPrompt, prompttemplate.FieldTaskPrompt:
 			values[i] = new(sql.NullString)
@@ -110,6 +112,13 @@ func (_m *PromptTemplate) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field is_builtin", values[i])
 			} else if value.Valid {
 				_m.IsBuiltin = value.Bool
+			}
+		case prompttemplate.FieldProjectID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field project_id", values[i])
+			} else if value.Valid {
+				_m.ProjectID = new(int)
+				*_m.ProjectID = int(value.Int64)
 			}
 		case prompttemplate.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -175,6 +184,11 @@ func (_m *PromptTemplate) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("is_builtin=")
 	builder.WriteString(fmt.Sprintf("%v", _m.IsBuiltin))
+	builder.WriteString(", ")
+	if v := _m.ProjectID; v != nil {
+		builder.WriteString("project_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

@@ -15,7 +15,7 @@ var validTransitions = map[model.TaskStatus][]model.TaskStatus{
 	model.TaskStatusQueued:      {model.TaskStatusRunning, model.TaskStatusCancelled},
 	model.TaskStatusRunning:     {model.TaskStatusPaused, model.TaskStatusWaitingUser, model.TaskStatusSucceeded, model.TaskStatusFailed, model.TaskStatusCancelled},
 	model.TaskStatusPaused:      {model.TaskStatusQueued, model.TaskStatusCancelled},
-	model.TaskStatusWaitingUser: {model.TaskStatusRunning, model.TaskStatusCancelled},
+	model.TaskStatusWaitingUser: {model.TaskStatusQueued, model.TaskStatusRunning, model.TaskStatusCancelled},
 	model.TaskStatusFailed:      {model.TaskStatusQueued, model.TaskStatusCancelled},
 }
 

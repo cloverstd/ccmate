@@ -70,6 +70,47 @@ go build -o bin/ccmate-server ./cmd/ccmate-server
 
 首次启动会在日志中输出 bootstrap token，用于注册管理员 Passkey。
 
+## Prompt Templates
+
+Prompt Templates 用于自定义发送给 Agent 的 task prompt。模板使用 Go template 语法，支持以下变量：
+
+| 变量 | 类型 | 说明 |
+|------|------|------|
+| `{{.IssueNumber}}` | int | Issue 编号 |
+| `{{.IssueTitle}}` | string | Issue 标题 |
+| `{{.IssueBody}}` | string | Issue 正文 |
+| `{{.IssueLabels}}` | []string | Issue 标签列表 |
+| `{{.IssueUser}}` | string | Issue 创建者 |
+| `{{.IssueLink}}` | string | Issue 链接（如 https://github.com/owner/repo/issues/1） |
+| `{{.RepoOwner}}` | string | 仓库 Owner |
+| `{{.RepoName}}` | string | 仓库名称 |
+| `{{.RepoFullName}}` | string | 完整仓库名（owner/name） |
+| `{{.TaskType}}` | string | 任务类型（issue_implementation / review_fix / manual_followup） |
+| `{{.BranchName}}` | string | 工作分支名 |
+
+模板还提供以下辅助函数：
+
+| 函数 | 说明 | 示例 |
+|------|------|------|
+| `has` | 检查字符串切片是否包含某项 | `{{if has .IssueLabels "bug"}}...{{end}}` |
+| `join` | 用分隔符连接字符串切片 | `{{join .IssueLabels ", "}}` |
+
+### 示例
+
+```
+请使用 Go 编写，遵循项目现有代码风格。
+{{if has .IssueLabels "bug"}}这是一个 Bug 修复任务，请确保添加回归测试。{{end}}
+{{if eq .TaskType "review_fix"}}请仔细阅读 review 反馈并逐条修复。{{end}}
+```
+
+### Scope 策略
+
+每个 Project 可以设置 Template Scope：
+
+- **Project Only**：只使用项目自己的模板
+- **Global Only**：只使用全局默认模板（在 Settings 中配置）
+- **Merged**：全局模板 + 项目模板合并（全局在前，项目在后）
+
 ## 项目结构
 
 ```

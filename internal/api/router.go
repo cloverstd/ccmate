@@ -5,12 +5,15 @@ import (
 	"net/http"
 	"strings"
 
+	"encoding/json"
+
 	"github.com/cloverstd/ccmate/internal/api/handler"
 	"github.com/cloverstd/ccmate/internal/api/middleware"
 	"github.com/cloverstd/ccmate/internal/auth"
 	"github.com/cloverstd/ccmate/internal/config"
 	"github.com/cloverstd/ccmate/internal/ent"
 	"github.com/cloverstd/ccmate/internal/gitprovider"
+	"github.com/cloverstd/ccmate/internal/notify"
 	"github.com/cloverstd/ccmate/internal/scheduler"
 	"github.com/cloverstd/ccmate/internal/settings"
 	"github.com/cloverstd/ccmate/internal/sse"
@@ -27,6 +30,7 @@ func NewRouter(
 	passkeySvc *auth.PasskeyService,
 	gitProv gitprovider.GitProvider,
 	settingsMgr *settings.Manager,
+	notifyMgr *notify.Manager,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -39,7 +43,7 @@ func NewRouter(
 	authHandler := handler.NewAuthHandler(client, cfg, passkeySvc, settingsMgr)
 	projectHandler := handler.NewProjectHandler(client, gitProv, settingsMgr)
 	taskHandler := handler.NewTaskHandler(client, cfg, broker, sched, gitProv, settingsMgr)
-	webhookHandler := handler.NewWebhookHandler(client, cfg, sched)
+	webhookHandler := handler.NewWebhookHandler(client, cfg, sched, settingsMgr)
 	setupHandler := handler.NewSetupHandler(settingsMgr, gitProv)
 	if gitProv != nil {
 		webhookHandler.SetGitProvider(gitProv)
@@ -119,6 +123,22 @@ func NewRouter(
 			r.Post("/tasks/{id}/messages", taskHandler.SendMessage)
 			r.Post("/tasks/{id}/attachments", taskHandler.UploadAttachment)
 			r.Get("/tasks/{id}/events/stream", taskHandler.EventStream)
+
+			// Notifications
+			r.Post("/notifications/test", func(w http.ResponseWriter, r *http.Request) {
+				if notifyMgr == nil {
+					http.Error(w, `{"error":"notify not configured"}`, http.StatusServiceUnavailable)
+					return
+				}
+				if err := notifyMgr.SendTest(r.Context()); err != nil {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusBadGateway)
+					json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(`{"status":"ok"}`))
+			})
 
 			// Models
 			r.Get("/models", projectHandler.ListModels)

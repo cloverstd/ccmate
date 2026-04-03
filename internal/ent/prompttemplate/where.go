@@ -75,6 +75,11 @@ func IsBuiltin(v bool) predicate.PromptTemplate {
 	return predicate.PromptTemplate(sql.FieldEQ(FieldIsBuiltin, v))
 }
 
+// ProjectID applies equality check predicate on the "project_id" field. It's identical to ProjectIDEQ.
+func ProjectID(v int) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldEQ(FieldProjectID, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.PromptTemplate {
 	return predicate.PromptTemplate(sql.FieldEQ(FieldCreatedAt, v))
@@ -288,6 +293,56 @@ func IsBuiltinEQ(v bool) predicate.PromptTemplate {
 // IsBuiltinNEQ applies the NEQ predicate on the "is_builtin" field.
 func IsBuiltinNEQ(v bool) predicate.PromptTemplate {
 	return predicate.PromptTemplate(sql.FieldNEQ(FieldIsBuiltin, v))
+}
+
+// ProjectIDEQ applies the EQ predicate on the "project_id" field.
+func ProjectIDEQ(v int) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldEQ(FieldProjectID, v))
+}
+
+// ProjectIDNEQ applies the NEQ predicate on the "project_id" field.
+func ProjectIDNEQ(v int) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldNEQ(FieldProjectID, v))
+}
+
+// ProjectIDIn applies the In predicate on the "project_id" field.
+func ProjectIDIn(vs ...int) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldIn(FieldProjectID, vs...))
+}
+
+// ProjectIDNotIn applies the NotIn predicate on the "project_id" field.
+func ProjectIDNotIn(vs ...int) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldNotIn(FieldProjectID, vs...))
+}
+
+// ProjectIDGT applies the GT predicate on the "project_id" field.
+func ProjectIDGT(v int) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldGT(FieldProjectID, v))
+}
+
+// ProjectIDGTE applies the GTE predicate on the "project_id" field.
+func ProjectIDGTE(v int) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldGTE(FieldProjectID, v))
+}
+
+// ProjectIDLT applies the LT predicate on the "project_id" field.
+func ProjectIDLT(v int) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldLT(FieldProjectID, v))
+}
+
+// ProjectIDLTE applies the LTE predicate on the "project_id" field.
+func ProjectIDLTE(v int) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldLTE(FieldProjectID, v))
+}
+
+// ProjectIDIsNil applies the IsNil predicate on the "project_id" field.
+func ProjectIDIsNil() predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldIsNull(FieldProjectID))
+}
+
+// ProjectIDNotNil applies the NotNil predicate on the "project_id" field.
+func ProjectIDNotNil() predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldNotNull(FieldProjectID))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

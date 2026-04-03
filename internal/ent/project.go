@@ -27,6 +27,12 @@ type Project struct {
 	DefaultBranch string `json:"default_branch,omitempty"`
 	// AutoMode holds the value of the "auto_mode" field.
 	AutoMode bool `json:"auto_mode,omitempty"`
+	// DefaultAgentProfileID holds the value of the "default_agent_profile_id" field.
+	DefaultAgentProfileID *int `json:"default_agent_profile_id,omitempty"`
+	// DefaultPromptTemplateID holds the value of the "default_prompt_template_id" field.
+	DefaultPromptTemplateID *int `json:"default_prompt_template_id,omitempty"`
+	// PromptTemplateScope holds the value of the "prompt_template_scope" field.
+	PromptTemplateScope project.PromptTemplateScope `json:"prompt_template_scope,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -73,9 +79,9 @@ func (*Project) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case project.FieldAutoMode:
 			values[i] = new(sql.NullBool)
-		case project.FieldID:
+		case project.FieldID, project.FieldDefaultAgentProfileID, project.FieldDefaultPromptTemplateID:
 			values[i] = new(sql.NullInt64)
-		case project.FieldName, project.FieldRepoURL, project.FieldGitProvider, project.FieldDefaultBranch:
+		case project.FieldName, project.FieldRepoURL, project.FieldGitProvider, project.FieldDefaultBranch, project.FieldPromptTemplateScope:
 			values[i] = new(sql.NullString)
 		case project.FieldCreatedAt, project.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -129,6 +135,26 @@ func (_m *Project) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field auto_mode", values[i])
 			} else if value.Valid {
 				_m.AutoMode = value.Bool
+			}
+		case project.FieldDefaultAgentProfileID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field default_agent_profile_id", values[i])
+			} else if value.Valid {
+				_m.DefaultAgentProfileID = new(int)
+				*_m.DefaultAgentProfileID = int(value.Int64)
+			}
+		case project.FieldDefaultPromptTemplateID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field default_prompt_template_id", values[i])
+			} else if value.Valid {
+				_m.DefaultPromptTemplateID = new(int)
+				*_m.DefaultPromptTemplateID = int(value.Int64)
+			}
+		case project.FieldPromptTemplateScope:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field prompt_template_scope", values[i])
+			} else if value.Valid {
+				_m.PromptTemplateScope = project.PromptTemplateScope(value.String)
 			}
 		case project.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -202,6 +228,19 @@ func (_m *Project) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("auto_mode=")
 	builder.WriteString(fmt.Sprintf("%v", _m.AutoMode))
+	builder.WriteString(", ")
+	if v := _m.DefaultAgentProfileID; v != nil {
+		builder.WriteString("default_agent_profile_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.DefaultPromptTemplateID; v != nil {
+		builder.WriteString("default_prompt_template_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("prompt_template_scope=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PromptTemplateScope))
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

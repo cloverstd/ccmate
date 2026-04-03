@@ -12,6 +12,7 @@ import (
 	enttask "github.com/cloverstd/ccmate/internal/ent/task"
 	"github.com/cloverstd/ccmate/internal/gitprovider"
 	"github.com/cloverstd/ccmate/internal/model"
+	"github.com/cloverstd/ccmate/internal/settings"
 )
 
 // Command represents a parsed /ccmate command.
@@ -46,7 +47,7 @@ func ParseCommand(body string) (*Command, error) {
 }
 
 // ParseAndExecuteCommand parses, authorizes, executes a command, and writes back results.
-func ParseAndExecuteCommand(ctx context.Context, client *ent.Client, event *model.NormalizedEvent, gitProv gitprovider.GitProvider) error {
+func ParseAndExecuteCommand(ctx context.Context, client *ent.Client, event *model.NormalizedEvent, gitProv gitprovider.GitProvider, settingsMgr *settings.Manager) error {
 	cmd, err := ParseCommand(event.CommentBody)
 	if err != nil {
 		slog.Info("ignoring invalid command", "body", event.CommentBody, "error", err)
@@ -112,12 +113,15 @@ func ParseAndExecuteCommand(ctx context.Context, client *ent.Client, event *mode
 		if task != nil {
 			resultMsg = "A task is already active for this issue."
 		} else {
-			_, err := client.Task.Create().
+			builder := client.Task.Create().
 				SetProject(proj).SetIssueNumber(issueNumber).
 				SetType(enttask.TypeIssueImplementation).
 				SetStatus(enttask.StatusQueued).
-				SetTriggerSource(string(model.TriggerSourceCommand)).
-				Save(ctx)
+				SetTriggerSource(string(model.TriggerSourceCommand))
+			if agentProfileID := resolveProjectAgentProfileID(ctx, client, settingsMgr, proj); agentProfileID != nil {
+				builder = builder.SetAgentProfileID(*agentProfileID)
+			}
+			_, err := builder.Save(ctx)
 			if err != nil {
 				resultMsg = fmt.Sprintf("Failed to create task: %v", err)
 			} else {
@@ -173,13 +177,16 @@ func ParseAndExecuteCommand(ctx context.Context, client *ent.Client, event *mode
 		if prNum == 0 {
 			resultMsg = "This command is only valid on PR comments."
 		} else {
-			_, err := client.Task.Create().
+			builder := client.Task.Create().
 				SetProject(proj).SetIssueNumber(issueNumber).
 				SetNillablePrNumber(&prNum).
 				SetType(enttask.TypeReviewFix).
 				SetStatus(enttask.StatusQueued).
-				SetTriggerSource(string(model.TriggerSourceCommand)).
-				Save(ctx)
+				SetTriggerSource(string(model.TriggerSourceCommand))
+			if agentProfileID := resolveProjectAgentProfileID(ctx, client, settingsMgr, proj); agentProfileID != nil {
+				builder = builder.SetAgentProfileID(*agentProfileID)
+			}
+			_, err := builder.Save(ctx)
 			if err != nil {
 				resultMsg = fmt.Sprintf("Failed to create review fix task: %v", err)
 			} else {
@@ -190,6 +197,21 @@ func ParseAndExecuteCommand(ctx context.Context, client *ent.Client, event *mode
 
 	slog.Info("command executed", "command", cmd.Name, "user", event.CommentUser, "result", resultMsg)
 	writeBack(ctx, gitProv, event.Repo, issueNumber, fmt.Sprintf("`/ccmate %s`: %s", cmd.Name, resultMsg))
+	return nil
+}
+
+func resolveProjectAgentProfileID(ctx context.Context, client *ent.Client, settingsMgr *settings.Manager, proj *ent.Project) *int {
+	if proj.DefaultAgentProfileID != nil {
+		return proj.DefaultAgentProfileID
+	}
+	if settingsMgr == nil {
+		return nil
+	}
+	if fallback := settingsMgr.GetOptionalInt(ctx, settings.KeyDefaultAgentProfileID); fallback != nil {
+		if _, err := client.AgentProfile.Get(ctx, *fallback); err == nil {
+			return fallback
+		}
+	}
 	return nil
 }
 

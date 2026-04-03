@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import { tasksApi, projectsApi, type TaskStatus } from '../lib/api'
 import StatusBadge from '../components/StatusBadge'
+import { Card, CardHeader, CardContent, CardFooter, Label, Input, Select, Btn, Tag, EmptyState } from '../components/ui'
 
 const statusOptions: (TaskStatus | '')[] = ['', 'queued', 'running', 'paused', 'waiting_user', 'succeeded', 'failed', 'cancelled']
 
@@ -17,10 +18,7 @@ export default function TaskListPage() {
     queryFn: () => tasksApi.list(statusFilter ? { status: statusFilter } : undefined),
   })
 
-  const { data: projects } = useQuery({
-    queryKey: ['projects'],
-    queryFn: projectsApi.list,
-  })
+  const { data: projects } = useQuery({ queryKey: ['projects'], queryFn: projectsApi.list })
 
   const createMutation = useMutation({
     mutationFn: () => tasksApi.create(newTask),
@@ -32,63 +30,62 @@ export default function TaskListPage() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Tasks</h1>
         <div className="flex gap-2">
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-2 border border-gray-300 rounded text-sm">
+          <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="">All Status</option>
             {statusOptions.filter(Boolean).map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <button onClick={() => setShowCreate(!showCreate)} className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">
-            {showCreate ? 'Cancel' : 'New Task'}
-          </button>
+          </Select>
+          <Btn onClick={() => setShowCreate(!showCreate)}>{showCreate ? 'Cancel' : 'New Task'}</Btn>
         </div>
       </div>
 
       {showCreate && (
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <div className="flex gap-4 items-end">
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Project</label>
-              <select value={newTask.project_id} onChange={(e) => setNewTask({...newTask, project_id: parseInt(e.target.value)})} className="w-full px-3 py-2 border rounded text-sm">
-                <option value={0}>Select project</option>
-                {projects?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+        <Card>
+          <CardHeader title="Create Task" description="Run a task for a specific issue" />
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label>Project</Label>
+                <Select value={newTask.project_id} onChange={(e) => setNewTask({ ...newTask, project_id: parseInt(e.target.value) })} className="w-full">
+                  <option value={0}>Select project</option>
+                  {projects?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </Select>
+              </div>
+              <div>
+                <Label>Issue Number</Label>
+                <Input type="number" value={newTask.issue_number || ''} onChange={(e) => setNewTask({ ...newTask, issue_number: parseInt(e.target.value) || 0 })} placeholder="#" />
+              </div>
             </div>
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Issue Number</label>
-              <input type="number" value={newTask.issue_number || ''} onChange={(e) => setNewTask({...newTask, issue_number: parseInt(e.target.value) || 0})} className="w-full px-3 py-2 border rounded text-sm" placeholder="#" />
-            </div>
-            <button onClick={() => createMutation.mutate()} disabled={!newTask.project_id || !newTask.issue_number} className="px-4 py-2 bg-blue-600 text-white rounded text-sm disabled:opacity-50">Create</button>
-          </div>
-        </div>
+          </CardContent>
+          <CardFooter>
+            <Btn onClick={() => createMutation.mutate()} disabled={!newTask.project_id || !newTask.issue_number || createMutation.isPending}>
+              {createMutation.isPending ? 'Creating...' : 'Create Task'}
+            </Btn>
+          </CardFooter>
+        </Card>
       )}
 
-      {isLoading ? <div className="text-gray-500">Loading...</div> : (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Project</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Issue</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {tasks?.map((task) => (
-                <tr key={task.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4"><Link to={`/tasks/${task.id}`} className="text-blue-600 hover:underline">#{task.id}</Link></td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{task.edges.project?.name || '-'}</td>
-                  <td className="px-6 py-4 text-sm">#{task.issue_number}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{task.type}</td>
-                  <td className="px-6 py-4"><StatusBadge status={task.status} /></td>
-                  <td className="px-6 py-4 text-sm text-gray-500">{new Date(task.created_at).toLocaleString()}</td>
-                </tr>
+      {isLoading ? (
+        <div className="py-8 text-center text-gray-400 text-sm">Loading...</div>
+      ) : !tasks || tasks.length === 0 ? (
+        <Card><CardContent><EmptyState>No tasks</EmptyState></CardContent></Card>
+      ) : (
+        <Card className="!mb-0">
+          <CardContent className="!p-0">
+            <div className="divide-y divide-gray-100">
+              {tasks.map((task) => (
+                <Link key={task.id} to={`/tasks/${task.id}`}
+                  className="flex items-center gap-4 px-5 py-3 hover:bg-gray-50 transition-colors">
+                  <span className="text-sm font-semibold text-blue-600 w-16 shrink-0">#{task.id}</span>
+                  <span className="text-sm text-gray-700 truncate min-w-0 flex-1">{task.edges.project?.name || '-'}</span>
+                  <span className="text-sm text-gray-500 w-20 shrink-0">Issue #{task.issue_number}</span>
+                  <Tag color="gray">{task.type.replace('_', ' ')}</Tag>
+                  <StatusBadge status={task.status} />
+                  <span className="text-xs text-gray-400 w-36 shrink-0 text-right hidden sm:block">{new Date(task.created_at).toLocaleString()}</span>
+                </Link>
               ))}
-              {(!tasks || tasks.length === 0) && <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-500">No tasks</td></tr>}
-            </tbody>
-          </table>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   )

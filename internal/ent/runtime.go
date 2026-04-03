@@ -139,11 +139,11 @@ func init() {
 	// project.DefaultAutoMode holds the default value on creation for the auto_mode field.
 	project.DefaultAutoMode = projectDescAutoMode.Default.(bool)
 	// projectDescCreatedAt is the schema descriptor for created_at field.
-	projectDescCreatedAt := projectFields[5].Descriptor()
+	projectDescCreatedAt := projectFields[8].Descriptor()
 	// project.DefaultCreatedAt holds the default value on creation for the created_at field.
 	project.DefaultCreatedAt = projectDescCreatedAt.Default.(func() time.Time)
 	// projectDescUpdatedAt is the schema descriptor for updated_at field.
-	projectDescUpdatedAt := projectFields[6].Descriptor()
+	projectDescUpdatedAt := projectFields[9].Descriptor()
 	// project.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	project.DefaultUpdatedAt = projectDescUpdatedAt.Default.(func() time.Time)
 	// project.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
@@ -173,11 +173,11 @@ func init() {
 	// prompttemplate.DefaultIsBuiltin holds the default value on creation for the is_builtin field.
 	prompttemplate.DefaultIsBuiltin = prompttemplateDescIsBuiltin.Default.(bool)
 	// prompttemplateDescCreatedAt is the schema descriptor for created_at field.
-	prompttemplateDescCreatedAt := prompttemplateFields[4].Descriptor()
+	prompttemplateDescCreatedAt := prompttemplateFields[5].Descriptor()
 	// prompttemplate.DefaultCreatedAt holds the default value on creation for the created_at field.
 	prompttemplate.DefaultCreatedAt = prompttemplateDescCreatedAt.Default.(func() time.Time)
 	// prompttemplateDescUpdatedAt is the schema descriptor for updated_at field.
-	prompttemplateDescUpdatedAt := prompttemplateFields[5].Descriptor()
+	prompttemplateDescUpdatedAt := prompttemplateFields[6].Descriptor()
 	// prompttemplate.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	prompttemplate.DefaultUpdatedAt = prompttemplateDescUpdatedAt.Default.(func() time.Time)
 	// prompttemplate.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
@@ -257,19 +257,19 @@ func init() {
 	taskFields := schema.Task{}.Fields()
 	_ = taskFields
 	// taskDescPriority is the schema descriptor for priority field.
-	taskDescPriority := taskFields[4].Descriptor()
+	taskDescPriority := taskFields[5].Descriptor()
 	// task.DefaultPriority holds the default value on creation for the priority field.
 	task.DefaultPriority = taskDescPriority.Default.(int)
 	// taskDescTriggerSource is the schema descriptor for trigger_source field.
-	taskDescTriggerSource := taskFields[5].Descriptor()
+	taskDescTriggerSource := taskFields[6].Descriptor()
 	// task.DefaultTriggerSource holds the default value on creation for the trigger_source field.
 	task.DefaultTriggerSource = taskDescTriggerSource.Default.(string)
 	// taskDescCreatedAt is the schema descriptor for created_at field.
-	taskDescCreatedAt := taskFields[7].Descriptor()
+	taskDescCreatedAt := taskFields[8].Descriptor()
 	// task.DefaultCreatedAt holds the default value on creation for the created_at field.
 	task.DefaultCreatedAt = taskDescCreatedAt.Default.(func() time.Time)
 	// taskDescUpdatedAt is the schema descriptor for updated_at field.
-	taskDescUpdatedAt := taskFields[8].Descriptor()
+	taskDescUpdatedAt := taskFields[9].Descriptor()
 	// task.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	task.DefaultUpdatedAt = taskDescUpdatedAt.Default.(func() time.Time)
 	// task.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

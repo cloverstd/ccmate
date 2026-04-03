@@ -100,6 +100,74 @@ func (_u *ProjectUpdate) SetNillableAutoMode(v *bool) *ProjectUpdate {
 	return _u
 }
 
+// SetDefaultAgentProfileID sets the "default_agent_profile_id" field.
+func (_u *ProjectUpdate) SetDefaultAgentProfileID(v int) *ProjectUpdate {
+	_u.mutation.ResetDefaultAgentProfileID()
+	_u.mutation.SetDefaultAgentProfileID(v)
+	return _u
+}
+
+// SetNillableDefaultAgentProfileID sets the "default_agent_profile_id" field if the given value is not nil.
+func (_u *ProjectUpdate) SetNillableDefaultAgentProfileID(v *int) *ProjectUpdate {
+	if v != nil {
+		_u.SetDefaultAgentProfileID(*v)
+	}
+	return _u
+}
+
+// AddDefaultAgentProfileID adds value to the "default_agent_profile_id" field.
+func (_u *ProjectUpdate) AddDefaultAgentProfileID(v int) *ProjectUpdate {
+	_u.mutation.AddDefaultAgentProfileID(v)
+	return _u
+}
+
+// ClearDefaultAgentProfileID clears the value of the "default_agent_profile_id" field.
+func (_u *ProjectUpdate) ClearDefaultAgentProfileID() *ProjectUpdate {
+	_u.mutation.ClearDefaultAgentProfileID()
+	return _u
+}
+
+// SetDefaultPromptTemplateID sets the "default_prompt_template_id" field.
+func (_u *ProjectUpdate) SetDefaultPromptTemplateID(v int) *ProjectUpdate {
+	_u.mutation.ResetDefaultPromptTemplateID()
+	_u.mutation.SetDefaultPromptTemplateID(v)
+	return _u
+}
+
+// SetNillableDefaultPromptTemplateID sets the "default_prompt_template_id" field if the given value is not nil.
+func (_u *ProjectUpdate) SetNillableDefaultPromptTemplateID(v *int) *ProjectUpdate {
+	if v != nil {
+		_u.SetDefaultPromptTemplateID(*v)
+	}
+	return _u
+}
+
+// AddDefaultPromptTemplateID adds value to the "default_prompt_template_id" field.
+func (_u *ProjectUpdate) AddDefaultPromptTemplateID(v int) *ProjectUpdate {
+	_u.mutation.AddDefaultPromptTemplateID(v)
+	return _u
+}
+
+// ClearDefaultPromptTemplateID clears the value of the "default_prompt_template_id" field.
+func (_u *ProjectUpdate) ClearDefaultPromptTemplateID() *ProjectUpdate {
+	_u.mutation.ClearDefaultPromptTemplateID()
+	return _u
+}
+
+// SetPromptTemplateScope sets the "prompt_template_scope" field.
+func (_u *ProjectUpdate) SetPromptTemplateScope(v project.PromptTemplateScope) *ProjectUpdate {
+	_u.mutation.SetPromptTemplateScope(v)
+	return _u
+}
+
+// SetNillablePromptTemplateScope sets the "prompt_template_scope" field if the given value is not nil.
+func (_u *ProjectUpdate) SetNillablePromptTemplateScope(v *project.PromptTemplateScope) *ProjectUpdate {
+	if v != nil {
+		_u.SetPromptTemplateScope(*v)
+	}
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *ProjectUpdate) SetUpdatedAt(v time.Time) *ProjectUpdate {
 	_u.mutation.SetUpdatedAt(v)
@@ -231,6 +299,11 @@ func (_u *ProjectUpdate) check() error {
 			return &ValidationError{Name: "repo_url", err: fmt.Errorf(`ent: validator failed for field "Project.repo_url": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.PromptTemplateScope(); ok {
+		if err := project.PromptTemplateScopeValidator(v); err != nil {
+			return &ValidationError{Name: "prompt_template_scope", err: fmt.Errorf(`ent: validator failed for field "Project.prompt_template_scope": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -260,6 +333,27 @@ func (_u *ProjectUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AutoMode(); ok {
 		_spec.SetField(project.FieldAutoMode, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.DefaultAgentProfileID(); ok {
+		_spec.SetField(project.FieldDefaultAgentProfileID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedDefaultAgentProfileID(); ok {
+		_spec.AddField(project.FieldDefaultAgentProfileID, field.TypeInt, value)
+	}
+	if _u.mutation.DefaultAgentProfileIDCleared() {
+		_spec.ClearField(project.FieldDefaultAgentProfileID, field.TypeInt)
+	}
+	if value, ok := _u.mutation.DefaultPromptTemplateID(); ok {
+		_spec.SetField(project.FieldDefaultPromptTemplateID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedDefaultPromptTemplateID(); ok {
+		_spec.AddField(project.FieldDefaultPromptTemplateID, field.TypeInt, value)
+	}
+	if _u.mutation.DefaultPromptTemplateIDCleared() {
+		_spec.ClearField(project.FieldDefaultPromptTemplateID, field.TypeInt)
+	}
+	if value, ok := _u.mutation.PromptTemplateScope(); ok {
+		_spec.SetField(project.FieldPromptTemplateScope, field.TypeEnum, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(project.FieldUpdatedAt, field.TypeTime, value)
@@ -444,6 +538,74 @@ func (_u *ProjectUpdateOne) SetNillableAutoMode(v *bool) *ProjectUpdateOne {
 	return _u
 }
 
+// SetDefaultAgentProfileID sets the "default_agent_profile_id" field.
+func (_u *ProjectUpdateOne) SetDefaultAgentProfileID(v int) *ProjectUpdateOne {
+	_u.mutation.ResetDefaultAgentProfileID()
+	_u.mutation.SetDefaultAgentProfileID(v)
+	return _u
+}
+
+// SetNillableDefaultAgentProfileID sets the "default_agent_profile_id" field if the given value is not nil.
+func (_u *ProjectUpdateOne) SetNillableDefaultAgentProfileID(v *int) *ProjectUpdateOne {
+	if v != nil {
+		_u.SetDefaultAgentProfileID(*v)
+	}
+	return _u
+}
+
+// AddDefaultAgentProfileID adds value to the "default_agent_profile_id" field.
+func (_u *ProjectUpdateOne) AddDefaultAgentProfileID(v int) *ProjectUpdateOne {
+	_u.mutation.AddDefaultAgentProfileID(v)
+	return _u
+}
+
+// ClearDefaultAgentProfileID clears the value of the "default_agent_profile_id" field.
+func (_u *ProjectUpdateOne) ClearDefaultAgentProfileID() *ProjectUpdateOne {
+	_u.mutation.ClearDefaultAgentProfileID()
+	return _u
+}
+
+// SetDefaultPromptTemplateID sets the "default_prompt_template_id" field.
+func (_u *ProjectUpdateOne) SetDefaultPromptTemplateID(v int) *ProjectUpdateOne {
+	_u.mutation.ResetDefaultPromptTemplateID()
+	_u.mutation.SetDefaultPromptTemplateID(v)
+	return _u
+}
+
+// SetNillableDefaultPromptTemplateID sets the "default_prompt_template_id" field if the given value is not nil.
+func (_u *ProjectUpdateOne) SetNillableDefaultPromptTemplateID(v *int) *ProjectUpdateOne {
+	if v != nil {
+		_u.SetDefaultPromptTemplateID(*v)
+	}
+	return _u
+}
+
+// AddDefaultPromptTemplateID adds value to the "default_prompt_template_id" field.
+func (_u *ProjectUpdateOne) AddDefaultPromptTemplateID(v int) *ProjectUpdateOne {
+	_u.mutation.AddDefaultPromptTemplateID(v)
+	return _u
+}
+
+// ClearDefaultPromptTemplateID clears the value of the "default_prompt_template_id" field.
+func (_u *ProjectUpdateOne) ClearDefaultPromptTemplateID() *ProjectUpdateOne {
+	_u.mutation.ClearDefaultPromptTemplateID()
+	return _u
+}
+
+// SetPromptTemplateScope sets the "prompt_template_scope" field.
+func (_u *ProjectUpdateOne) SetPromptTemplateScope(v project.PromptTemplateScope) *ProjectUpdateOne {
+	_u.mutation.SetPromptTemplateScope(v)
+	return _u
+}
+
+// SetNillablePromptTemplateScope sets the "prompt_template_scope" field if the given value is not nil.
+func (_u *ProjectUpdateOne) SetNillablePromptTemplateScope(v *project.PromptTemplateScope) *ProjectUpdateOne {
+	if v != nil {
+		_u.SetPromptTemplateScope(*v)
+	}
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *ProjectUpdateOne) SetUpdatedAt(v time.Time) *ProjectUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
@@ -588,6 +750,11 @@ func (_u *ProjectUpdateOne) check() error {
 			return &ValidationError{Name: "repo_url", err: fmt.Errorf(`ent: validator failed for field "Project.repo_url": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.PromptTemplateScope(); ok {
+		if err := project.PromptTemplateScopeValidator(v); err != nil {
+			return &ValidationError{Name: "prompt_template_scope", err: fmt.Errorf(`ent: validator failed for field "Project.prompt_template_scope": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -634,6 +801,27 @@ func (_u *ProjectUpdateOne) sqlSave(ctx context.Context) (_node *Project, err er
 	}
 	if value, ok := _u.mutation.AutoMode(); ok {
 		_spec.SetField(project.FieldAutoMode, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.DefaultAgentProfileID(); ok {
+		_spec.SetField(project.FieldDefaultAgentProfileID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedDefaultAgentProfileID(); ok {
+		_spec.AddField(project.FieldDefaultAgentProfileID, field.TypeInt, value)
+	}
+	if _u.mutation.DefaultAgentProfileIDCleared() {
+		_spec.ClearField(project.FieldDefaultAgentProfileID, field.TypeInt)
+	}
+	if value, ok := _u.mutation.DefaultPromptTemplateID(); ok {
+		_spec.SetField(project.FieldDefaultPromptTemplateID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedDefaultPromptTemplateID(); ok {
+		_spec.AddField(project.FieldDefaultPromptTemplateID, field.TypeInt, value)
+	}
+	if _u.mutation.DefaultPromptTemplateIDCleared() {
+		_spec.ClearField(project.FieldDefaultPromptTemplateID, field.TypeInt)
+	}
+	if value, ok := _u.mutation.PromptTemplateScope(); ok {
+		_spec.SetField(project.FieldPromptTemplateScope, field.TypeEnum, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(project.FieldUpdatedAt, field.TypeTime, value)

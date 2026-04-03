@@ -17,6 +17,8 @@ type GitProvider interface {
 	CreateBranch(ctx context.Context, repo model.RepoRef, base string, newBranch string) error
 	PushBranch(ctx context.Context, repo model.RepoRef, localPath string, branch string) error
 	CreatePullRequest(ctx context.Context, repo model.RepoRef, req model.CreatePRRequest) (*model.PullRequest, error)
+	GetPullRequest(ctx context.Context, repo model.RepoRef, prNumber int) (*model.PullRequest, error)
+	FindPullRequestByHead(ctx context.Context, repo model.RepoRef, head string) (*model.PullRequest, error)
 	ListPullRequestReviews(ctx context.Context, repo model.RepoRef, prNumber int) ([]model.Review, error)
 	GetPullRequestDiff(ctx context.Context, repo model.RepoRef, prNumber int) (string, error)
 	IsAuthorizedCommenter(ctx context.Context, repo model.RepoRef, user string) (bool, error)
@@ -25,6 +27,8 @@ type GitProvider interface {
 	ListRepoPRs(ctx context.Context, repo model.RepoRef) ([]model.PullRequest, error)
 	CreateIssue(ctx context.Context, repo model.RepoRef, title string, body string, labels []string) (*model.Issue, error)
 	ListAccessibleRepos(ctx context.Context) ([]model.RepoInfo, error)
+	ListRepoBranches(ctx context.Context, repo model.RepoRef) ([]model.RepoBranch, error)
+	ListRepoTags(ctx context.Context, repo model.RepoRef) ([]model.RepoTag, error)
 	CloseIssue(ctx context.Context, repo model.RepoRef, issueNumber int) error
 	MergePullRequest(ctx context.Context, repo model.RepoRef, prNumber int) error
 }

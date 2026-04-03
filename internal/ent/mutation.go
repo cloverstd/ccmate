@@ -2628,26 +2628,31 @@ func (m *ExecutionLeaseMutation) ResetEdge(name string) error {
 // ProjectMutation represents an operation that mutates the Project nodes in the graph.
 type ProjectMutation struct {
 	config
-	op                 Op
-	typ                string
-	id                 *int
-	name               *string
-	repo_url           *string
-	git_provider       *string
-	default_branch     *string
-	auto_mode          *bool
-	created_at         *time.Time
-	updated_at         *time.Time
-	clearedFields      map[string]struct{}
-	label_rules        map[int]struct{}
-	removedlabel_rules map[int]struct{}
-	clearedlabel_rules bool
-	tasks              map[int]struct{}
-	removedtasks       map[int]struct{}
-	clearedtasks       bool
-	done               bool
-	oldValue           func(context.Context) (*Project, error)
-	predicates         []predicate.Project
+	op                            Op
+	typ                           string
+	id                            *int
+	name                          *string
+	repo_url                      *string
+	git_provider                  *string
+	default_branch                *string
+	auto_mode                     *bool
+	default_agent_profile_id      *int
+	adddefault_agent_profile_id   *int
+	default_prompt_template_id    *int
+	adddefault_prompt_template_id *int
+	prompt_template_scope         *project.PromptTemplateScope
+	created_at                    *time.Time
+	updated_at                    *time.Time
+	clearedFields                 map[string]struct{}
+	label_rules                   map[int]struct{}
+	removedlabel_rules            map[int]struct{}
+	clearedlabel_rules            bool
+	tasks                         map[int]struct{}
+	removedtasks                  map[int]struct{}
+	clearedtasks                  bool
+	done                          bool
+	oldValue                      func(context.Context) (*Project, error)
+	predicates                    []predicate.Project
 }
 
 var _ ent.Mutation = (*ProjectMutation)(nil)
@@ -2928,6 +2933,182 @@ func (m *ProjectMutation) ResetAutoMode() {
 	m.auto_mode = nil
 }
 
+// SetDefaultAgentProfileID sets the "default_agent_profile_id" field.
+func (m *ProjectMutation) SetDefaultAgentProfileID(i int) {
+	m.default_agent_profile_id = &i
+	m.adddefault_agent_profile_id = nil
+}
+
+// DefaultAgentProfileID returns the value of the "default_agent_profile_id" field in the mutation.
+func (m *ProjectMutation) DefaultAgentProfileID() (r int, exists bool) {
+	v := m.default_agent_profile_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDefaultAgentProfileID returns the old "default_agent_profile_id" field's value of the Project entity.
+// If the Project object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProjectMutation) OldDefaultAgentProfileID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDefaultAgentProfileID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDefaultAgentProfileID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDefaultAgentProfileID: %w", err)
+	}
+	return oldValue.DefaultAgentProfileID, nil
+}
+
+// AddDefaultAgentProfileID adds i to the "default_agent_profile_id" field.
+func (m *ProjectMutation) AddDefaultAgentProfileID(i int) {
+	if m.adddefault_agent_profile_id != nil {
+		*m.adddefault_agent_profile_id += i
+	} else {
+		m.adddefault_agent_profile_id = &i
+	}
+}
+
+// AddedDefaultAgentProfileID returns the value that was added to the "default_agent_profile_id" field in this mutation.
+func (m *ProjectMutation) AddedDefaultAgentProfileID() (r int, exists bool) {
+	v := m.adddefault_agent_profile_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearDefaultAgentProfileID clears the value of the "default_agent_profile_id" field.
+func (m *ProjectMutation) ClearDefaultAgentProfileID() {
+	m.default_agent_profile_id = nil
+	m.adddefault_agent_profile_id = nil
+	m.clearedFields[project.FieldDefaultAgentProfileID] = struct{}{}
+}
+
+// DefaultAgentProfileIDCleared returns if the "default_agent_profile_id" field was cleared in this mutation.
+func (m *ProjectMutation) DefaultAgentProfileIDCleared() bool {
+	_, ok := m.clearedFields[project.FieldDefaultAgentProfileID]
+	return ok
+}
+
+// ResetDefaultAgentProfileID resets all changes to the "default_agent_profile_id" field.
+func (m *ProjectMutation) ResetDefaultAgentProfileID() {
+	m.default_agent_profile_id = nil
+	m.adddefault_agent_profile_id = nil
+	delete(m.clearedFields, project.FieldDefaultAgentProfileID)
+}
+
+// SetDefaultPromptTemplateID sets the "default_prompt_template_id" field.
+func (m *ProjectMutation) SetDefaultPromptTemplateID(i int) {
+	m.default_prompt_template_id = &i
+	m.adddefault_prompt_template_id = nil
+}
+
+// DefaultPromptTemplateID returns the value of the "default_prompt_template_id" field in the mutation.
+func (m *ProjectMutation) DefaultPromptTemplateID() (r int, exists bool) {
+	v := m.default_prompt_template_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDefaultPromptTemplateID returns the old "default_prompt_template_id" field's value of the Project entity.
+// If the Project object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProjectMutation) OldDefaultPromptTemplateID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDefaultPromptTemplateID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDefaultPromptTemplateID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDefaultPromptTemplateID: %w", err)
+	}
+	return oldValue.DefaultPromptTemplateID, nil
+}
+
+// AddDefaultPromptTemplateID adds i to the "default_prompt_template_id" field.
+func (m *ProjectMutation) AddDefaultPromptTemplateID(i int) {
+	if m.adddefault_prompt_template_id != nil {
+		*m.adddefault_prompt_template_id += i
+	} else {
+		m.adddefault_prompt_template_id = &i
+	}
+}
+
+// AddedDefaultPromptTemplateID returns the value that was added to the "default_prompt_template_id" field in this mutation.
+func (m *ProjectMutation) AddedDefaultPromptTemplateID() (r int, exists bool) {
+	v := m.adddefault_prompt_template_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearDefaultPromptTemplateID clears the value of the "default_prompt_template_id" field.
+func (m *ProjectMutation) ClearDefaultPromptTemplateID() {
+	m.default_prompt_template_id = nil
+	m.adddefault_prompt_template_id = nil
+	m.clearedFields[project.FieldDefaultPromptTemplateID] = struct{}{}
+}
+
+// DefaultPromptTemplateIDCleared returns if the "default_prompt_template_id" field was cleared in this mutation.
+func (m *ProjectMutation) DefaultPromptTemplateIDCleared() bool {
+	_, ok := m.clearedFields[project.FieldDefaultPromptTemplateID]
+	return ok
+}
+
+// ResetDefaultPromptTemplateID resets all changes to the "default_prompt_template_id" field.
+func (m *ProjectMutation) ResetDefaultPromptTemplateID() {
+	m.default_prompt_template_id = nil
+	m.adddefault_prompt_template_id = nil
+	delete(m.clearedFields, project.FieldDefaultPromptTemplateID)
+}
+
+// SetPromptTemplateScope sets the "prompt_template_scope" field.
+func (m *ProjectMutation) SetPromptTemplateScope(pts project.PromptTemplateScope) {
+	m.prompt_template_scope = &pts
+}
+
+// PromptTemplateScope returns the value of the "prompt_template_scope" field in the mutation.
+func (m *ProjectMutation) PromptTemplateScope() (r project.PromptTemplateScope, exists bool) {
+	v := m.prompt_template_scope
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPromptTemplateScope returns the old "prompt_template_scope" field's value of the Project entity.
+// If the Project object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProjectMutation) OldPromptTemplateScope(ctx context.Context) (v project.PromptTemplateScope, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPromptTemplateScope is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPromptTemplateScope requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPromptTemplateScope: %w", err)
+	}
+	return oldValue.PromptTemplateScope, nil
+}
+
+// ResetPromptTemplateScope resets all changes to the "prompt_template_scope" field.
+func (m *ProjectMutation) ResetPromptTemplateScope() {
+	m.prompt_template_scope = nil
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *ProjectMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -3142,7 +3323,7 @@ func (m *ProjectMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ProjectMutation) Fields() []string {
-	fields := make([]string, 0, 7)
+	fields := make([]string, 0, 10)
 	if m.name != nil {
 		fields = append(fields, project.FieldName)
 	}
@@ -3157,6 +3338,15 @@ func (m *ProjectMutation) Fields() []string {
 	}
 	if m.auto_mode != nil {
 		fields = append(fields, project.FieldAutoMode)
+	}
+	if m.default_agent_profile_id != nil {
+		fields = append(fields, project.FieldDefaultAgentProfileID)
+	}
+	if m.default_prompt_template_id != nil {
+		fields = append(fields, project.FieldDefaultPromptTemplateID)
+	}
+	if m.prompt_template_scope != nil {
+		fields = append(fields, project.FieldPromptTemplateScope)
 	}
 	if m.created_at != nil {
 		fields = append(fields, project.FieldCreatedAt)
@@ -3182,6 +3372,12 @@ func (m *ProjectMutation) Field(name string) (ent.Value, bool) {
 		return m.DefaultBranch()
 	case project.FieldAutoMode:
 		return m.AutoMode()
+	case project.FieldDefaultAgentProfileID:
+		return m.DefaultAgentProfileID()
+	case project.FieldDefaultPromptTemplateID:
+		return m.DefaultPromptTemplateID()
+	case project.FieldPromptTemplateScope:
+		return m.PromptTemplateScope()
 	case project.FieldCreatedAt:
 		return m.CreatedAt()
 	case project.FieldUpdatedAt:
@@ -3205,6 +3401,12 @@ func (m *ProjectMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldDefaultBranch(ctx)
 	case project.FieldAutoMode:
 		return m.OldAutoMode(ctx)
+	case project.FieldDefaultAgentProfileID:
+		return m.OldDefaultAgentProfileID(ctx)
+	case project.FieldDefaultPromptTemplateID:
+		return m.OldDefaultPromptTemplateID(ctx)
+	case project.FieldPromptTemplateScope:
+		return m.OldPromptTemplateScope(ctx)
 	case project.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	case project.FieldUpdatedAt:
@@ -3253,6 +3455,27 @@ func (m *ProjectMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetAutoMode(v)
 		return nil
+	case project.FieldDefaultAgentProfileID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDefaultAgentProfileID(v)
+		return nil
+	case project.FieldDefaultPromptTemplateID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDefaultPromptTemplateID(v)
+		return nil
+	case project.FieldPromptTemplateScope:
+		v, ok := value.(project.PromptTemplateScope)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPromptTemplateScope(v)
+		return nil
 	case project.FieldCreatedAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -3274,13 +3497,26 @@ func (m *ProjectMutation) SetField(name string, value ent.Value) error {
 // AddedFields returns all numeric fields that were incremented/decremented during
 // this mutation.
 func (m *ProjectMutation) AddedFields() []string {
-	return nil
+	var fields []string
+	if m.adddefault_agent_profile_id != nil {
+		fields = append(fields, project.FieldDefaultAgentProfileID)
+	}
+	if m.adddefault_prompt_template_id != nil {
+		fields = append(fields, project.FieldDefaultPromptTemplateID)
+	}
+	return fields
 }
 
 // AddedField returns the numeric value that was incremented/decremented on a field
 // with the given name. The second boolean return value indicates that this field
 // was not set, or was not defined in the schema.
 func (m *ProjectMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case project.FieldDefaultAgentProfileID:
+		return m.AddedDefaultAgentProfileID()
+	case project.FieldDefaultPromptTemplateID:
+		return m.AddedDefaultPromptTemplateID()
+	}
 	return nil, false
 }
 
@@ -3289,6 +3525,20 @@ func (m *ProjectMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *ProjectMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case project.FieldDefaultAgentProfileID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDefaultAgentProfileID(v)
+		return nil
+	case project.FieldDefaultPromptTemplateID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDefaultPromptTemplateID(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Project numeric field %s", name)
 }
@@ -3296,7 +3546,14 @@ func (m *ProjectMutation) AddField(name string, value ent.Value) error {
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *ProjectMutation) ClearedFields() []string {
-	return nil
+	var fields []string
+	if m.FieldCleared(project.FieldDefaultAgentProfileID) {
+		fields = append(fields, project.FieldDefaultAgentProfileID)
+	}
+	if m.FieldCleared(project.FieldDefaultPromptTemplateID) {
+		fields = append(fields, project.FieldDefaultPromptTemplateID)
+	}
+	return fields
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -3309,6 +3566,14 @@ func (m *ProjectMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *ProjectMutation) ClearField(name string) error {
+	switch name {
+	case project.FieldDefaultAgentProfileID:
+		m.ClearDefaultAgentProfileID()
+		return nil
+	case project.FieldDefaultPromptTemplateID:
+		m.ClearDefaultPromptTemplateID()
+		return nil
+	}
 	return fmt.Errorf("unknown Project nullable field %s", name)
 }
 
@@ -3330,6 +3595,15 @@ func (m *ProjectMutation) ResetField(name string) error {
 		return nil
 	case project.FieldAutoMode:
 		m.ResetAutoMode()
+		return nil
+	case project.FieldDefaultAgentProfileID:
+		m.ResetDefaultAgentProfileID()
+		return nil
+	case project.FieldDefaultPromptTemplateID:
+		m.ResetDefaultPromptTemplateID()
+		return nil
+	case project.FieldPromptTemplateScope:
+		m.ResetPromptTemplateScope()
 		return nil
 	case project.FieldCreatedAt:
 		m.ResetCreatedAt()
@@ -3967,6 +4241,8 @@ type PromptTemplateMutation struct {
 	system_prompt      *string
 	task_prompt        *string
 	is_builtin         *bool
+	project_id         *int
+	addproject_id      *int
 	created_at         *time.Time
 	updated_at         *time.Time
 	clearedFields      map[string]struct{}
@@ -4220,6 +4496,76 @@ func (m *PromptTemplateMutation) ResetIsBuiltin() {
 	m.is_builtin = nil
 }
 
+// SetProjectID sets the "project_id" field.
+func (m *PromptTemplateMutation) SetProjectID(i int) {
+	m.project_id = &i
+	m.addproject_id = nil
+}
+
+// ProjectID returns the value of the "project_id" field in the mutation.
+func (m *PromptTemplateMutation) ProjectID() (r int, exists bool) {
+	v := m.project_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProjectID returns the old "project_id" field's value of the PromptTemplate entity.
+// If the PromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PromptTemplateMutation) OldProjectID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProjectID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProjectID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProjectID: %w", err)
+	}
+	return oldValue.ProjectID, nil
+}
+
+// AddProjectID adds i to the "project_id" field.
+func (m *PromptTemplateMutation) AddProjectID(i int) {
+	if m.addproject_id != nil {
+		*m.addproject_id += i
+	} else {
+		m.addproject_id = &i
+	}
+}
+
+// AddedProjectID returns the value that was added to the "project_id" field in this mutation.
+func (m *PromptTemplateMutation) AddedProjectID() (r int, exists bool) {
+	v := m.addproject_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearProjectID clears the value of the "project_id" field.
+func (m *PromptTemplateMutation) ClearProjectID() {
+	m.project_id = nil
+	m.addproject_id = nil
+	m.clearedFields[prompttemplate.FieldProjectID] = struct{}{}
+}
+
+// ProjectIDCleared returns if the "project_id" field was cleared in this mutation.
+func (m *PromptTemplateMutation) ProjectIDCleared() bool {
+	_, ok := m.clearedFields[prompttemplate.FieldProjectID]
+	return ok
+}
+
+// ResetProjectID resets all changes to the "project_id" field.
+func (m *PromptTemplateMutation) ResetProjectID() {
+	m.project_id = nil
+	m.addproject_id = nil
+	delete(m.clearedFields, prompttemplate.FieldProjectID)
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *PromptTemplateMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -4380,7 +4726,7 @@ func (m *PromptTemplateMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PromptTemplateMutation) Fields() []string {
-	fields := make([]string, 0, 6)
+	fields := make([]string, 0, 7)
 	if m.name != nil {
 		fields = append(fields, prompttemplate.FieldName)
 	}
@@ -4392,6 +4738,9 @@ func (m *PromptTemplateMutation) Fields() []string {
 	}
 	if m.is_builtin != nil {
 		fields = append(fields, prompttemplate.FieldIsBuiltin)
+	}
+	if m.project_id != nil {
+		fields = append(fields, prompttemplate.FieldProjectID)
 	}
 	if m.created_at != nil {
 		fields = append(fields, prompttemplate.FieldCreatedAt)
@@ -4415,6 +4764,8 @@ func (m *PromptTemplateMutation) Field(name string) (ent.Value, bool) {
 		return m.TaskPrompt()
 	case prompttemplate.FieldIsBuiltin:
 		return m.IsBuiltin()
+	case prompttemplate.FieldProjectID:
+		return m.ProjectID()
 	case prompttemplate.FieldCreatedAt:
 		return m.CreatedAt()
 	case prompttemplate.FieldUpdatedAt:
@@ -4436,6 +4787,8 @@ func (m *PromptTemplateMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldTaskPrompt(ctx)
 	case prompttemplate.FieldIsBuiltin:
 		return m.OldIsBuiltin(ctx)
+	case prompttemplate.FieldProjectID:
+		return m.OldProjectID(ctx)
 	case prompttemplate.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	case prompttemplate.FieldUpdatedAt:
@@ -4477,6 +4830,13 @@ func (m *PromptTemplateMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetIsBuiltin(v)
 		return nil
+	case prompttemplate.FieldProjectID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProjectID(v)
+		return nil
 	case prompttemplate.FieldCreatedAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -4498,13 +4858,21 @@ func (m *PromptTemplateMutation) SetField(name string, value ent.Value) error {
 // AddedFields returns all numeric fields that were incremented/decremented during
 // this mutation.
 func (m *PromptTemplateMutation) AddedFields() []string {
-	return nil
+	var fields []string
+	if m.addproject_id != nil {
+		fields = append(fields, prompttemplate.FieldProjectID)
+	}
+	return fields
 }
 
 // AddedField returns the numeric value that was incremented/decremented on a field
 // with the given name. The second boolean return value indicates that this field
 // was not set, or was not defined in the schema.
 func (m *PromptTemplateMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case prompttemplate.FieldProjectID:
+		return m.AddedProjectID()
+	}
 	return nil, false
 }
 
@@ -4513,6 +4881,13 @@ func (m *PromptTemplateMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *PromptTemplateMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case prompttemplate.FieldProjectID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddProjectID(v)
+		return nil
 	}
 	return fmt.Errorf("unknown PromptTemplate numeric field %s", name)
 }
@@ -4520,7 +4895,11 @@ func (m *PromptTemplateMutation) AddField(name string, value ent.Value) error {
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *PromptTemplateMutation) ClearedFields() []string {
-	return nil
+	var fields []string
+	if m.FieldCleared(prompttemplate.FieldProjectID) {
+		fields = append(fields, prompttemplate.FieldProjectID)
+	}
+	return fields
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -4533,6 +4912,11 @@ func (m *PromptTemplateMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *PromptTemplateMutation) ClearField(name string) error {
+	switch name {
+	case prompttemplate.FieldProjectID:
+		m.ClearProjectID()
+		return nil
+	}
 	return fmt.Errorf("unknown PromptTemplate nullable field %s", name)
 }
 
@@ -4551,6 +4935,9 @@ func (m *PromptTemplateMutation) ResetField(name string) error {
 		return nil
 	case prompttemplate.FieldIsBuiltin:
 		m.ResetIsBuiltin()
+		return nil
+	case prompttemplate.FieldProjectID:
+		m.ResetProjectID()
 		return nil
 	case prompttemplate.FieldCreatedAt:
 		m.ResetCreatedAt()
@@ -7838,6 +8225,8 @@ type TaskMutation struct {
 	addissue_number        *int
 	pr_number              *int
 	addpr_number           *int
+	agent_profile_id       *int
+	addagent_profile_id    *int
 	_type                  *task.Type
 	status                 *task.Status
 	priority               *int
@@ -8090,6 +8479,76 @@ func (m *TaskMutation) ResetPrNumber() {
 	m.pr_number = nil
 	m.addpr_number = nil
 	delete(m.clearedFields, task.FieldPrNumber)
+}
+
+// SetAgentProfileID sets the "agent_profile_id" field.
+func (m *TaskMutation) SetAgentProfileID(i int) {
+	m.agent_profile_id = &i
+	m.addagent_profile_id = nil
+}
+
+// AgentProfileID returns the value of the "agent_profile_id" field in the mutation.
+func (m *TaskMutation) AgentProfileID() (r int, exists bool) {
+	v := m.agent_profile_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAgentProfileID returns the old "agent_profile_id" field's value of the Task entity.
+// If the Task object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TaskMutation) OldAgentProfileID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAgentProfileID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAgentProfileID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAgentProfileID: %w", err)
+	}
+	return oldValue.AgentProfileID, nil
+}
+
+// AddAgentProfileID adds i to the "agent_profile_id" field.
+func (m *TaskMutation) AddAgentProfileID(i int) {
+	if m.addagent_profile_id != nil {
+		*m.addagent_profile_id += i
+	} else {
+		m.addagent_profile_id = &i
+	}
+}
+
+// AddedAgentProfileID returns the value that was added to the "agent_profile_id" field in this mutation.
+func (m *TaskMutation) AddedAgentProfileID() (r int, exists bool) {
+	v := m.addagent_profile_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearAgentProfileID clears the value of the "agent_profile_id" field.
+func (m *TaskMutation) ClearAgentProfileID() {
+	m.agent_profile_id = nil
+	m.addagent_profile_id = nil
+	m.clearedFields[task.FieldAgentProfileID] = struct{}{}
+}
+
+// AgentProfileIDCleared returns if the "agent_profile_id" field was cleared in this mutation.
+func (m *TaskMutation) AgentProfileIDCleared() bool {
+	_, ok := m.clearedFields[task.FieldAgentProfileID]
+	return ok
+}
+
+// ResetAgentProfileID resets all changes to the "agent_profile_id" field.
+func (m *TaskMutation) ResetAgentProfileID() {
+	m.agent_profile_id = nil
+	m.addagent_profile_id = nil
+	delete(m.clearedFields, task.FieldAgentProfileID)
 }
 
 // SetType sets the "type" field.
@@ -8711,12 +9170,15 @@ func (m *TaskMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TaskMutation) Fields() []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 10)
 	if m.issue_number != nil {
 		fields = append(fields, task.FieldIssueNumber)
 	}
 	if m.pr_number != nil {
 		fields = append(fields, task.FieldPrNumber)
+	}
+	if m.agent_profile_id != nil {
+		fields = append(fields, task.FieldAgentProfileID)
 	}
 	if m._type != nil {
 		fields = append(fields, task.FieldType)
@@ -8751,6 +9213,8 @@ func (m *TaskMutation) Field(name string) (ent.Value, bool) {
 		return m.IssueNumber()
 	case task.FieldPrNumber:
 		return m.PrNumber()
+	case task.FieldAgentProfileID:
+		return m.AgentProfileID()
 	case task.FieldType:
 		return m.GetType()
 	case task.FieldStatus:
@@ -8778,6 +9242,8 @@ func (m *TaskMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldIssueNumber(ctx)
 	case task.FieldPrNumber:
 		return m.OldPrNumber(ctx)
+	case task.FieldAgentProfileID:
+		return m.OldAgentProfileID(ctx)
 	case task.FieldType:
 		return m.OldType(ctx)
 	case task.FieldStatus:
@@ -8814,6 +9280,13 @@ func (m *TaskMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPrNumber(v)
+		return nil
+	case task.FieldAgentProfileID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAgentProfileID(v)
 		return nil
 	case task.FieldType:
 		v, ok := value.(task.Type)
@@ -8878,6 +9351,9 @@ func (m *TaskMutation) AddedFields() []string {
 	if m.addpr_number != nil {
 		fields = append(fields, task.FieldPrNumber)
 	}
+	if m.addagent_profile_id != nil {
+		fields = append(fields, task.FieldAgentProfileID)
+	}
 	if m.addpriority != nil {
 		fields = append(fields, task.FieldPriority)
 	}
@@ -8896,6 +9372,8 @@ func (m *TaskMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedIssueNumber()
 	case task.FieldPrNumber:
 		return m.AddedPrNumber()
+	case task.FieldAgentProfileID:
+		return m.AddedAgentProfileID()
 	case task.FieldPriority:
 		return m.AddedPriority()
 	case task.FieldCurrentSessionID:
@@ -8923,6 +9401,13 @@ func (m *TaskMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddPrNumber(v)
 		return nil
+	case task.FieldAgentProfileID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAgentProfileID(v)
+		return nil
 	case task.FieldPriority:
 		v, ok := value.(int)
 		if !ok {
@@ -8948,6 +9433,9 @@ func (m *TaskMutation) ClearedFields() []string {
 	if m.FieldCleared(task.FieldPrNumber) {
 		fields = append(fields, task.FieldPrNumber)
 	}
+	if m.FieldCleared(task.FieldAgentProfileID) {
+		fields = append(fields, task.FieldAgentProfileID)
+	}
 	if m.FieldCleared(task.FieldCurrentSessionID) {
 		fields = append(fields, task.FieldCurrentSessionID)
 	}
@@ -8968,6 +9456,9 @@ func (m *TaskMutation) ClearField(name string) error {
 	case task.FieldPrNumber:
 		m.ClearPrNumber()
 		return nil
+	case task.FieldAgentProfileID:
+		m.ClearAgentProfileID()
+		return nil
 	case task.FieldCurrentSessionID:
 		m.ClearCurrentSessionID()
 		return nil
@@ -8984,6 +9475,9 @@ func (m *TaskMutation) ResetField(name string) error {
 		return nil
 	case task.FieldPrNumber:
 		m.ResetPrNumber()
+		return nil
+	case task.FieldAgentProfileID:
+		m.ResetAgentProfileID()
 		return nil
 	case task.FieldType:
 		m.ResetType()

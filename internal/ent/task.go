@@ -24,6 +24,8 @@ type Task struct {
 	IssueNumber int `json:"issue_number,omitempty"`
 	// PrNumber holds the value of the "pr_number" field.
 	PrNumber *int `json:"pr_number,omitempty"`
+	// AgentProfileID holds the value of the "agent_profile_id" field.
+	AgentProfileID *int `json:"agent_profile_id,omitempty"`
 	// Type holds the value of the "type" field.
 	Type task.Type `json:"type,omitempty"`
 	// Status holds the value of the "status" field.
@@ -129,7 +131,7 @@ func (*Task) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case task.FieldID, task.FieldIssueNumber, task.FieldPrNumber, task.FieldPriority, task.FieldCurrentSessionID:
+		case task.FieldID, task.FieldIssueNumber, task.FieldPrNumber, task.FieldAgentProfileID, task.FieldPriority, task.FieldCurrentSessionID:
 			values[i] = new(sql.NullInt64)
 		case task.FieldType, task.FieldStatus, task.FieldTriggerSource:
 			values[i] = new(sql.NullString)
@@ -170,6 +172,13 @@ func (_m *Task) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.PrNumber = new(int)
 				*_m.PrNumber = int(value.Int64)
+			}
+		case task.FieldAgentProfileID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field agent_profile_id", values[i])
+			} else if value.Valid {
+				_m.AgentProfileID = new(int)
+				*_m.AgentProfileID = int(value.Int64)
 			}
 		case task.FieldType:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -292,6 +301,11 @@ func (_m *Task) String() string {
 	builder.WriteString(", ")
 	if v := _m.PrNumber; v != nil {
 		builder.WriteString("pr_number=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.AgentProfileID; v != nil {
+		builder.WriteString("agent_profile_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")

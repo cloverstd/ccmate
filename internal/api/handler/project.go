@@ -10,6 +10,7 @@ import (
 
 	"github.com/cloverstd/ccmate/internal/ent"
 	"github.com/cloverstd/ccmate/internal/ent/project"
+	"github.com/cloverstd/ccmate/internal/ent/prompttemplate"
 	enttask "github.com/cloverstd/ccmate/internal/ent/task"
 	"github.com/cloverstd/ccmate/internal/gitprovider"
 	"github.com/cloverstd/ccmate/internal/model"
@@ -29,11 +30,14 @@ func NewProjectHandler(client *ent.Client, gitProv gitprovider.GitProvider, sett
 }
 
 type CreateProjectRequest struct {
-	Name          string `json:"name"`
-	RepoURL       string `json:"repo_url"`
-	GitProvider   string `json:"git_provider"`
-	DefaultBranch string `json:"default_branch"`
-	AutoMode      bool   `json:"auto_mode"`
+	Name                    string `json:"name"`
+	RepoURL                 string `json:"repo_url"`
+	GitProvider             string `json:"git_provider"`
+	DefaultBranch           string `json:"default_branch"`
+	AutoMode                bool   `json:"auto_mode"`
+	DefaultAgentProfileID   *int   `json:"default_agent_profile_id"`
+	DefaultPromptTemplateID *int   `json:"default_prompt_template_id"`
+	PromptTemplateScope     string `json:"prompt_template_scope"`
 }
 
 func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -68,9 +72,27 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.DefaultBranch == "" {
 		req.DefaultBranch = "main"
 	}
-	p, err := h.client.Project.Create().
+	builder := h.client.Project.Create().
 		SetName(req.Name).SetRepoURL(req.RepoURL).SetGitProvider(req.GitProvider).
-		SetDefaultBranch(req.DefaultBranch).SetAutoMode(req.AutoMode).Save(r.Context())
+		SetDefaultBranch(req.DefaultBranch).SetAutoMode(req.AutoMode)
+	if req.DefaultAgentProfileID != nil {
+		if _, err := h.client.AgentProfile.Get(r.Context(), *req.DefaultAgentProfileID); err != nil {
+			http.Error(w, `{"error":"default agent profile not found"}`, http.StatusBadRequest)
+			return
+		}
+		builder = builder.SetDefaultAgentProfileID(*req.DefaultAgentProfileID)
+	}
+	if req.DefaultPromptTemplateID != nil {
+		if _, err := h.client.PromptTemplate.Get(r.Context(), *req.DefaultPromptTemplateID); err != nil {
+			http.Error(w, `{"error":"default prompt template not found"}`, http.StatusBadRequest)
+			return
+		}
+		builder = builder.SetDefaultPromptTemplateID(*req.DefaultPromptTemplateID)
+	}
+	if req.PromptTemplateScope != "" {
+		builder = builder.SetPromptTemplateScope(project.PromptTemplateScope(req.PromptTemplateScope))
+	}
+	p, err := builder.Save(r.Context())
 	if err != nil {
 		http.Error(w, `{"error":"failed to create project"}`, http.StatusInternalServerError)
 		return
@@ -101,9 +123,31 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
 		return
 	}
-	p, err := h.client.Project.UpdateOneID(id).
+	builder := h.client.Project.UpdateOneID(id).
 		SetName(req.Name).SetRepoURL(req.RepoURL).SetGitProvider(req.GitProvider).
-		SetDefaultBranch(req.DefaultBranch).SetAutoMode(req.AutoMode).Save(r.Context())
+		SetDefaultBranch(req.DefaultBranch).SetAutoMode(req.AutoMode)
+	if req.DefaultAgentProfileID != nil {
+		if _, err := h.client.AgentProfile.Get(r.Context(), *req.DefaultAgentProfileID); err != nil {
+			http.Error(w, `{"error":"default agent profile not found"}`, http.StatusBadRequest)
+			return
+		}
+		builder = builder.SetDefaultAgentProfileID(*req.DefaultAgentProfileID)
+	} else {
+		builder = builder.ClearDefaultAgentProfileID()
+	}
+	if req.DefaultPromptTemplateID != nil {
+		if _, err := h.client.PromptTemplate.Get(r.Context(), *req.DefaultPromptTemplateID); err != nil {
+			http.Error(w, `{"error":"default prompt template not found"}`, http.StatusBadRequest)
+			return
+		}
+		builder = builder.SetDefaultPromptTemplateID(*req.DefaultPromptTemplateID)
+	} else {
+		builder = builder.ClearDefaultPromptTemplateID()
+	}
+	if req.PromptTemplateScope != "" {
+		builder = builder.SetPromptTemplateScope(project.PromptTemplateScope(req.PromptTemplateScope))
+	}
+	p, err := builder.Save(r.Context())
 	if err != nil {
 		if ent.IsNotFound(err) {
 			http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
@@ -141,12 +185,21 @@ func (h *ProjectHandler) getLocalRepoPath(r *http.Request) (string, int, error) 
 func (h *ProjectHandler) GetRepoInfo(w http.ResponseWriter, r *http.Request) {
 	repoPath, projectID, _ := h.getLocalRepoPath(r)
 	ctx := r.Context()
+	repo := h.getRepoRef(w, r)
+	if repo == nil {
+		return
+	}
 
-	// Fetch latest
-	_ = runner.FetchProject(ctx, repoPath)
-
-	branches, _ := runner.ListBranches(ctx, repoPath)
-	tags, _ := runner.ListTags(ctx, repoPath)
+	branches, err := h.gitProv.ListRepoBranches(ctx, *repo)
+	if err != nil {
+		http.Error(w, `{"error":"failed to list remote branches: `+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+	tags, err := h.gitProv.ListRepoTags(ctx, *repo)
+	if err != nil {
+		http.Error(w, `{"error":"failed to list remote tags: `+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"project_id": projectID,
@@ -260,10 +313,29 @@ type PromptTemplateRequest struct {
 	SystemPrompt string `json:"system_prompt"`
 	TaskPrompt   string `json:"task_prompt"`
 	IsBuiltin    bool   `json:"is_builtin"`
+	ProjectID    *int   `json:"project_id"`
 }
 
 func (h *ProjectHandler) ListPromptTemplates(w http.ResponseWriter, r *http.Request) {
-	templates, err := h.client.PromptTemplate.Query().All(r.Context())
+	query := h.client.PromptTemplate.Query()
+	scope := r.URL.Query().Get("scope")
+	projectIDStr := r.URL.Query().Get("project_id")
+	switch scope {
+	case "global":
+		query = query.Where(prompttemplate.ProjectIDIsNil())
+	case "project":
+		if pid, err := strconv.Atoi(projectIDStr); err == nil {
+			query = query.Where(prompttemplate.ProjectID(pid))
+		}
+	case "all":
+		if pid, err := strconv.Atoi(projectIDStr); err == nil {
+			query = query.Where(prompttemplate.Or(
+				prompttemplate.ProjectIDIsNil(),
+				prompttemplate.ProjectID(pid),
+			))
+		}
+	}
+	templates, err := query.All(r.Context())
 	if err != nil {
 		http.Error(w, `{"error":"failed to list templates"}`, http.StatusInternalServerError)
 		return
@@ -277,9 +349,13 @@ func (h *ProjectHandler) CreatePromptTemplate(w http.ResponseWriter, r *http.Req
 		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
 		return
 	}
-	t, err := h.client.PromptTemplate.Create().
+	builder := h.client.PromptTemplate.Create().
 		SetName(req.Name).SetSystemPrompt(req.SystemPrompt).
-		SetTaskPrompt(req.TaskPrompt).SetIsBuiltin(req.IsBuiltin).Save(r.Context())
+		SetTaskPrompt(req.TaskPrompt).SetIsBuiltin(req.IsBuiltin)
+	if req.ProjectID != nil {
+		builder = builder.SetProjectID(*req.ProjectID)
+	}
+	t, err := builder.Save(r.Context())
 	if err != nil {
 		http.Error(w, `{"error":"failed to create template"}`, http.StatusInternalServerError)
 		return
@@ -393,7 +469,6 @@ func parseRepoURL(url string) model.RepoRef {
 	}
 	return model.RepoRef{}
 }
-
 
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")

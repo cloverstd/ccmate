@@ -19,6 +19,8 @@ const (
 	FieldIssueNumber = "issue_number"
 	// FieldPrNumber holds the string denoting the pr_number field in the database.
 	FieldPrNumber = "pr_number"
+	// FieldAgentProfileID holds the string denoting the agent_profile_id field in the database.
+	FieldAgentProfileID = "agent_profile_id"
 	// FieldType holds the string denoting the type field in the database.
 	FieldType = "type"
 	// FieldStatus holds the string denoting the status field in the database.
@@ -96,6 +98,7 @@ var Columns = []string{
 	FieldID,
 	FieldIssueNumber,
 	FieldPrNumber,
+	FieldAgentProfileID,
 	FieldType,
 	FieldStatus,
 	FieldPriority,
@@ -211,6 +214,11 @@ func ByIssueNumber(opts ...sql.OrderTermOption) OrderOption {
 // ByPrNumber orders the results by the pr_number field.
 func ByPrNumber(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPrNumber, opts...).ToFunc()
+}
+
+// ByAgentProfileID orders the results by the agent_profile_id field.
+func ByAgentProfileID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAgentProfileID, opts...).ToFunc()
 }
 
 // ByType orders the results by the type field.

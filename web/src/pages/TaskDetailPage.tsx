@@ -1,20 +1,27 @@
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useEffect, useRef } from 'react'
-import Markdown from 'react-markdown'
-import { tasksApi, subscribeToTaskEvents, type TaskStatus, type SessionMessage, type SessionEvent } from '../lib/api'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import Markdown from '../components/Markdown'
+import { tasksApi, subscribeToTaskEvents, type TaskStatus, type SessionMessage, type SessionEvent, type RepoIssue, type RepoPR, type PromptSnapshot } from '../lib/api'
 import StatusBadge from '../components/StatusBadge'
-import { ToolCallView, ToolResultView } from '../components/ToolView'
+import { ToolCallView, ToolResultView, parseToolResult } from '../components/ToolView'
 
 export default function TaskDetailPage() {
   const { id } = useParams<{ id: string }>()
   const taskId = parseInt(id || '0')
   const queryClient = useQueryClient()
-  const [activeTab, setActiveTab] = useState<'messages' | 'events'>('messages')
+  const [activeTab, setActiveTab] = useState<'messages' | 'events' | 'issue' | 'pr'>('messages')
   const [messageInput, setMessageInput] = useState('')
-  const [liveEvents, setLiveEvents] = useState<Array<{ type: string; data: unknown; time: string }>>([])
+  const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([])
+  const [pendingMessages, setPendingMessages] = useState<SessionMessage[]>([])
   const [thinking, setThinking] = useState(false)
+  const [showCompleteOptions, setShowCompleteOptions] = useState(false)
+  const [completeOptions, setCompleteOptions] = useState({ close_issue: true, merge_pr: false })
+  const [headerCollapsed, setHeaderCollapsed] = useState(true)
   const endRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const isNearBottomRef = useRef(true)
+  const [showScrollBtn, setShowScrollBtn] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data: taskDetail, isLoading } = useQuery({
@@ -24,25 +31,36 @@ export default function TaskDetailPage() {
 
   const task = taskDetail?.task
   const workspacePath = taskDetail?.workspace_path
+  const issue = taskDetail?.issue
+  const pullRequest = taskDetail?.pull_request
+  const git = taskDetail?.git
+  const agentProfile = taskDetail?.agent_profile
+  const promptSnapshot = task?.edges?.prompt_snapshot
 
   const sendMutation = useMutation({
     mutationFn: (content: string) => tasksApi.sendMessage(taskId, content),
+    onMutate: (content: string) => {
+      // Optimistic: show user message immediately
+      const optimistic: SessionMessage = {
+        id: -Date.now(), role: 'user', content_type: 'text', content,
+        sequence: Date.now(), created_at: new Date().toISOString(),
+      }
+      setPendingMessages((prev) => [...prev, optimistic])
+    },
     onSuccess: () => {
-      setMessageInput('')
-      setThinking(true)
+      setMessageInput(''); setThinking(true)
+      setPendingMessages([])
       queryClient.invalidateQueries({ queryKey: ['task', taskId] })
     },
+    onError: () => { setPendingMessages([]) },
   })
   const uploadMutation = useMutation({
     mutationFn: (file: File) => tasksApi.uploadAttachment(taskId, file),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId] }),
   })
   const completeMutation = useMutation({
-    mutationFn: () => tasksApi.complete(taskId),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['task', taskId] })
-      alert(data.actions.join('\n'))
-    },
+    mutationFn: () => tasksApi.complete(taskId, completeOptions),
+    onSuccess: (data) => { queryClient.invalidateQueries({ queryKey: ['task', taskId] }); setShowCompleteOptions(false); alert(data.actions.join('\n')) },
   })
   const pauseMutation = useMutation({ mutationFn: () => tasksApi.pause(taskId), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId] }) })
   const resumeMutation = useMutation({ mutationFn: () => tasksApi.resume(taskId), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId] }) })
@@ -53,132 +71,579 @@ export default function TaskDetailPage() {
     if (!taskId || !task || !isActiveStatus(task.status)) return
     const unsub = subscribeToTaskEvents(taskId, (event) => {
       setLiveEvents((prev) => [...prev, { ...event, time: new Date().toLocaleTimeString() }])
-      // message.completed or result means claude is done thinking
-      if (event.type === 'message.completed' || event.type === 'task.completed' || event.type === 'task.failed') {
-        setThinking(false)
+      if (event.type === 'run.step' || event.type === 'tool.call' || event.type === 'message.delta') setThinking(true)
+      if (event.type === 'run.status') {
+        const s = (event.data as Record<string, unknown>)?.status
+        if (s === 'completed') setThinking(false)
+        if (s === 'started' || s === 'running') setThinking(true)
       }
-      // New activity means claude is thinking
-      if (event.type === 'message.delta' || event.type === 'tool.call') {
-        setThinking(true)
-      }
+      if (event.type === 'task.failed') setThinking(false)
       if (event.type === 'task.completed' || event.type === 'task.failed')
         queryClient.invalidateQueries({ queryKey: ['task', taskId] })
     })
     return unsub
   }, [taskId, task?.status])
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [liveEvents, thinking])
+  useEffect(() => {
+    if (isNearBottomRef.current) {
+      endRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [liveEvents, thinking])
 
   if (isLoading) return <div className="py-8 text-center text-gray-400 text-sm">Loading...</div>
   if (!task) return <div className="text-gray-500">Task not found</div>
 
   const sessions = task.edges.sessions || []
-  const historyMessages: SessionMessage[] = sessions.flatMap((s) => s.edges?.messages || []).sort((a, b) => a.sequence - b.sequence)
-  const historyEvents: SessionEvent[] = sessions.flatMap((s) => s.edges?.events || []).sort((a, b) => a.sequence - b.sequence)
-  const canSend = isActiveStatus(task.status) && !thinking && !sendMutation.isPending
+  const historyMessages: SessionMessage[] = sessions.flatMap((s) => s.edges?.messages || []).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+  const historyEvents: SessionEvent[] = sessions.flatMap((s) => s.edges?.events || []).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+  const taskActive = isActiveStatus(task.status)
+  const canSend = taskActive && !thinking && !sendMutation.isPending
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Header — collapsible */}
+      <div className="shrink-0">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <button onClick={() => setHeaderCollapsed(!headerCollapsed)} className="text-gray-400 hover:text-gray-600 shrink-0">
+              <svg className={`w-4 h-4 transition-transform ${headerCollapsed ? '' : 'rotate-90'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            </button>
+            <h1 className="text-xl font-bold truncate">Task #{task.id}</h1>
+            <StatusBadge status={task.status} />
+            <span className="text-xs text-gray-500 hidden sm:inline">Issue #{task.issue_number} &middot; {task.type} &middot; <Link to={`/projects/${task.edges.project?.id}`} className="text-blue-600 hover:underline">{task.edges.project?.name}</Link></span>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {task.status === 'running' && <button onClick={() => pauseMutation.mutate()} disabled={pauseMutation.isPending} className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50">{pauseMutation.isPending ? 'Pausing...' : 'Pause'}</button>}
+            {task.status === 'paused' && <button onClick={() => resumeMutation.mutate()} disabled={resumeMutation.isPending} className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50">{resumeMutation.isPending ? 'Resuming...' : 'Resume'}</button>}
+            {task.status === 'failed' && <button onClick={() => retryMutation.mutate()} disabled={retryMutation.isPending} className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50">{retryMutation.isPending ? 'Retrying...' : 'Retry'}</button>}
+            {(taskActive || cancelMutation.isPending) && <button onClick={() => cancelMutation.mutate()} disabled={cancelMutation.isPending} className="px-3 py-1 text-sm border border-red-300 text-red-600 rounded hover:bg-red-50 disabled:opacity-50">{cancelMutation.isPending ? 'Cancelling...' : 'Cancel'}</button>}
+            {task.status === 'waiting_user' && (
+              <button onClick={() => setShowCompleteOptions((v) => !v)} className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700">Mark Complete</button>
+            )}
+          </div>
+        </div>
+
+        {!headerCollapsed && (
+          <div className="mb-4 pl-7 space-y-2">
+            <p className="text-sm text-gray-500 sm:hidden">
+              Issue #{task.issue_number} &middot; {task.type} &middot; <Link to={`/projects/${task.edges.project?.id}`} className="text-blue-600 hover:underline">{task.edges.project?.name}</Link>
+            </p>
+            {task.pr_number && <p className="text-sm text-gray-500">PR #{task.pr_number}</p>}
+            {agentProfile && (
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="inline-flex items-center rounded-full bg-purple-50 px-2.5 py-1 text-purple-700 font-medium">{agentProfile.provider}</span>
+                <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-gray-700 font-mono">{agentProfile.model}</span>
+                {agentProfile.supports_image && <span className="text-gray-400" title="Supports image">img</span>}
+                {agentProfile.supports_resume && <span className="text-gray-400" title="Supports resume">resume</span>}
+              </div>
+            )}
+            {!agentProfile && task.agent_profile_id != null && <p className="text-sm text-gray-500">Agent #{task.agent_profile_id}</p>}
+            {promptSnapshot && (
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-gray-500">Prompt:</span>
+                <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-amber-700 font-mono">{promptSnapshot.model_name}{promptSnapshot.model_version ? ` (${promptSnapshot.model_version})` : ''}</span>
+                {promptSnapshot.system_prompt && <span className="text-gray-400">system: {promptSnapshot.system_prompt.length} chars</span>}
+                {promptSnapshot.task_prompt && <span className="text-gray-400">task: {promptSnapshot.task_prompt.length} chars</span>}
+              </div>
+            )}
+            {workspacePath && <p className="text-xs text-gray-400 font-mono">{workspacePath}</p>}
+            {git?.branch && (
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <a href={`${task.edges.project?.repo_url}/tree/${encodeURIComponent(git.branch)}`} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-1 font-mono text-blue-700 hover:bg-blue-100">{git.branch}</a>
+                {git.latest_commit && (
+                  <>
+                    <a href={`${task.edges.project?.repo_url}/commit/${git.latest_commit.hash}`} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 font-mono text-gray-700 hover:bg-gray-200">{git.latest_commit.hash}</a>
+                    <span className="text-gray-500 truncate max-w-xs">{git.latest_commit.message}</span>
+                  </>
+                )}
+                <button onClick={() => queryClient.invalidateQueries({ queryKey: ['task', taskId] })}
+                  className="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-gray-600 hover:bg-gray-200" title="Refresh">↻</button>
+              </div>
+            )}
+            {git?.branches && git.branches.length > 0 && (
+              <details className="text-xs">
+                <summary className="cursor-pointer text-gray-500 hover:text-gray-700">Branches ({git.branches.length})</summary>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {git.branches.map((b) => (
+                    <a key={b.name} href={`${task.edges.project?.repo_url}/tree/${encodeURIComponent(b.name)}`} target="_blank" rel="noopener noreferrer"
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 font-mono ${b.name === git.branch ? 'bg-blue-100 text-blue-700' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}>{b.name}</a>
+                  ))}
+                </div>
+              </details>
+            )}
+          </div>
+        )}
+
+        {showCompleteOptions && (
+          <div className="mb-4 card">
+            <div className="text-sm font-medium mb-3">Completion Actions</div>
+            <label className="flex items-center gap-2 text-sm mb-2">
+              <input type="checkbox" checked={completeOptions.close_issue} onChange={(e) => setCompleteOptions((prev) => ({ ...prev, close_issue: e.target.checked }))} />
+              只关闭 Issue
+            </label>
+            <label className="flex items-center gap-2 text-sm mb-4">
+              <input type="checkbox" checked={completeOptions.merge_pr} onChange={(e) => setCompleteOptions((prev) => ({ ...prev, merge_pr: e.target.checked, close_issue: e.target.checked ? true : prev.close_issue }))} />
+              Merge PR 并关闭 Issue
+            </label>
+            <div className="flex gap-2">
+              <button onClick={() => completeMutation.mutate()} disabled={completeMutation.isPending || (!completeOptions.close_issue && !completeOptions.merge_pr)}
+                className="px-4 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:opacity-50">{completeMutation.isPending ? 'Completing...' : 'Confirm'}</button>
+              <button onClick={() => setShowCompleteOptions(false)} className="px-4 py-2 border rounded text-sm">Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {/* Tabs */}
+        <div className="border-b border-gray-200">
+          <div className="flex flex-wrap gap-4">
+            {(['messages', 'events', 'issue', 'pr'] as const).map((tab) => {
+              const counts: Record<string, string> = {
+                messages: `${historyMessages.length}`,
+                events: `${historyEvents.length + liveEvents.length}`,
+                issue: '', pr: '',
+              }
+              return (
+                <button key={tab} onClick={() => { setActiveTab(tab); if (tab === 'issue' || tab === 'pr') queryClient.invalidateQueries({ queryKey: ['task', taskId] }) }}
+                  className={`pb-2 text-sm font-medium capitalize ${activeTab === tab ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}>
+                  {tab}{counts[tab] ? ` (${counts[tab]})` : ''}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="card !p-0 overflow-hidden flex-1 min-h-0 flex flex-col mt-4">
+        {activeTab === 'messages' ? (
+          <MessagesTab historyMessages={historyMessages} liveEvents={liveEvents} thinking={thinking}
+            taskActive={taskActive} canSend={canSend} messageInput={messageInput} setMessageInput={setMessageInput}
+            sendMutation={sendMutation} uploadMutation={uploadMutation} fileInputRef={fileInputRef} endRef={endRef}
+            scrollContainerRef={scrollContainerRef} isNearBottomRef={isNearBottomRef}
+            showScrollBtn={showScrollBtn} setShowScrollBtn={setShowScrollBtn}
+            promptSnapshot={promptSnapshot} pendingMessages={pendingMessages} />
+        ) : activeTab === 'events' ? (
+          <EventsTab historyEvents={historyEvents} liveEvents={liveEvents} endRef={endRef}
+            scrollContainerRef={scrollContainerRef} isNearBottomRef={isNearBottomRef}
+            showScrollBtn={showScrollBtn} setShowScrollBtn={setShowScrollBtn} />
+        ) : activeTab === 'issue' ? (
+          <IssueTab issue={issue ?? undefined} repoUrl={task.edges.project?.repo_url} />
+        ) : (
+          <PRTab pullRequest={pullRequest ?? undefined} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// Grouping: message ←→ tool_section ←→ message
+// ============================================================
+
+type LiveEvent = { type: string; data: unknown; time: string }
+
+/** A single tool.call, optionally paired with one tool.result */
+type ToolInvocation = {
+  text: string
+  tools: Array<{ name: string; input: Record<string, unknown> }>
+  result?: unknown
+  hasResult: boolean
+  status: 'running' | 'completed' | 'failed' | 'no_result'  // derived from result data or absence
+}
+
+type GroupedItem =
+  | { kind: 'user'; msg: SessionMessage }
+  | { kind: 'message'; msg: SessionMessage }
+  | { kind: 'tool_section'; invocations: ToolInvocation[]; loading: boolean }
+
+type GroupedLiveItem =
+  | { kind: 'message'; event: LiveEvent }
+  | { kind: 'tool_section'; invocations: ToolInvocation[]; loading: boolean }
+  | { kind: 'status'; event: LiveEvent }
+
+function deriveStatus(result: unknown, hasResult: boolean): ToolInvocation['status'] {
+  if (!hasResult) return 'no_result'
+  const parsed = parseToolResult(result)
+  if (parsed.type === 'command') {
+    if (parsed.status === 'failed' || (parsed.exitCode != null && parsed.exitCode !== 0)) return 'failed'
+    return 'completed'
+  }
+  return 'completed'
+}
+
+function buildInvocationFromMsg(callMsg: SessionMessage, resultMsg?: SessionMessage): ToolInvocation {
+  const { tools, text } = normalizeToolCallData(callMsg.content)
+  const result = resultMsg ? normalizeToolResultData(resultMsg.content) : undefined
+  const hasResult = !!resultMsg
+  return { text: text || toolsSummary(tools), tools, result, hasResult, status: deriveStatus(result, hasResult) }
+}
+
+function buildInvocationFromEvent(callEvent: LiveEvent, resultEvent?: LiveEvent): ToolInvocation {
+  const { tools, text } = normalizeToolCallEventData(callEvent.data as Record<string, unknown>)
+  const result = resultEvent ? normalizeToolResultEventData(resultEvent.data as Record<string, unknown>) : undefined
+  const hasResult = !!resultEvent
+  return { text: text || toolsSummary(tools), tools, result, hasResult, status: deriveStatus(result, hasResult) }
+}
+
+function toolsSummary(tools: Array<{ name: string; input: Record<string, unknown> }>): string {
+  if (tools.length === 0) return 'Tool call'
+  return tools.map((t) => {
+    if (t.name === 'Bash') return `$ ${(t.input.command as string || '').slice(0, 80)}`
+    if (t.name === 'Read') return `Read ${t.input.file_path}`
+    if (t.name === 'Write') return `Write ${t.input.file_path}`
+    if (t.name === 'Edit') return `Edit ${t.input.file_path}`
+    return t.name
+  }).join(', ')
+}
+
+function isToolResult(msg: SessionMessage): boolean {
+  return msg.content_type === 'tool_result' || (msg.role === 'tool' && msg.content_type !== 'result')
+}
+
+function groupHistoryMessages(messages: SessionMessage[]): GroupedItem[] {
+  const items: GroupedItem[] = []
+  let pendingInvocations: ToolInvocation[] = []
+
+  const flushTools = () => {
+    if (pendingInvocations.length > 0) {
+      items.push({ kind: 'tool_section', invocations: pendingInvocations, loading: false })
+      pendingInvocations = []
+    }
+  }
+
+  let i = 0
+  while (i < messages.length) {
+    const msg = messages[i]
+    if (msg.role === 'user') {
+      flushTools()
+      items.push({ kind: 'user', msg })
+      i++
+    } else if (msg.content_type === 'tool_call') {
+      // Collect consecutive tool_calls
+      const calls: SessionMessage[] = []
+      while (i < messages.length && messages[i].content_type === 'tool_call') {
+        calls.push(messages[i])
+        i++
+      }
+      // Collect consecutive tool_results
+      const results: SessionMessage[] = []
+      while (i < messages.length && isToolResult(messages[i])) {
+        results.push(messages[i])
+        i++
+      }
+      // Pair calls with results positionally
+      for (let j = 0; j < calls.length; j++) {
+        pendingInvocations.push(buildInvocationFromMsg(calls[j], results[j]))
+      }
+    } else if (isToolResult(msg)) {
+      // orphaned result — skip
+      i++
+    } else {
+      // result or text content_type — flush tools, add as message
+      flushTools()
+      items.push({ kind: 'message', msg })
+      i++
+    }
+  }
+  flushTools()
+  return items
+}
+
+function groupLiveEvents(events: LiveEvent[]): GroupedLiveItem[] {
+  const items: GroupedLiveItem[] = []
+  let pendingInvocations: ToolInvocation[] = []
+  let hasLoadingCall = false
+
+  const flushTools = () => {
+    if (pendingInvocations.length > 0) {
+      items.push({ kind: 'tool_section', invocations: pendingInvocations, loading: hasLoadingCall })
+      pendingInvocations = []
+      hasLoadingCall = false
+    }
+  }
+
+  let i = 0
+  while (i < events.length) {
+    const e = events[i]
+    if (e.type === 'tool.call') {
+      // Collect consecutive tool.calls
+      const calls: LiveEvent[] = []
+      while (i < events.length && events[i].type === 'tool.call') {
+        calls.push(events[i])
+        i++
+      }
+      // Collect consecutive tool.results
+      const results: LiveEvent[] = []
+      while (i < events.length && events[i].type === 'tool.result') {
+        results.push(events[i])
+        i++
+      }
+      // Pair calls with results positionally
+      for (let j = 0; j < calls.length; j++) {
+        const resultEvent = results[j]
+        pendingInvocations.push(buildInvocationFromEvent(calls[j], resultEvent))
+        if (!resultEvent) hasLoadingCall = true
+      }
+    } else if (e.type === 'tool.result') {
+      i++ // orphan
+    } else if (e.type === 'message.delta' || e.type === 'message.completed') {
+      flushTools()
+      items.push({ kind: 'message', event: e })
+      i++
+    } else if (e.type === 'task.completed' || e.type === 'task.failed' || (e.type === 'run.status' && (e.data as Record<string, unknown>)?.status === 'awaiting_user_confirmation')) {
+      flushTools()
+      items.push({ kind: 'status', event: e })
+      i++
+    } else {
+      i++ // skip run.step, connected, etc.
+    }
+  }
+  flushTools()
+  return items
+}
+
+// ============================================================
+// Messages Tab
+// ============================================================
+
+function handleScroll(e: React.UIEvent<HTMLDivElement>, isNearBottomRef: React.MutableRefObject<boolean>, setShowBtn?: (v: boolean) => void) {
+  const el = e.currentTarget
+  const threshold = 80
+  const near = el.scrollHeight - el.scrollTop - el.clientHeight < threshold
+  isNearBottomRef.current = near
+  setShowBtn?.(!near)
+}
+
+function MessagesTab({
+  historyMessages, liveEvents, thinking, taskActive, canSend,
+  messageInput, setMessageInput, sendMutation, uploadMutation, fileInputRef, endRef,
+  scrollContainerRef, isNearBottomRef, showScrollBtn, setShowScrollBtn,
+  promptSnapshot, pendingMessages,
+}: {
+  historyMessages: SessionMessage[]; liveEvents: LiveEvent[]; thinking: boolean
+  taskActive: boolean; canSend: boolean; messageInput: string; setMessageInput: (v: string) => void
+  sendMutation: { mutate: (v: string) => void; isPending: boolean }; uploadMutation: { mutate: (f: File) => void }
+  fileInputRef: React.RefObject<HTMLInputElement | null>; endRef: React.RefObject<HTMLDivElement | null>
+  scrollContainerRef: React.RefObject<HTMLDivElement | null>; isNearBottomRef: React.MutableRefObject<boolean>
+  showScrollBtn: boolean; setShowScrollBtn: (v: boolean) => void
+  promptSnapshot?: PromptSnapshot | null; pendingMessages: SessionMessage[]
+}) {
+  const grouped = useMemo(() => groupHistoryMessages(historyMessages), [historyMessages])
+  const groupedLive = useMemo(() => groupLiveEvents(liveEvents), [liveEvents])
+
+  const scrollToBottom = () => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth' })
+    isNearBottomRef.current = true
+    setShowScrollBtn(false)
+  }
+
+  return (
+    <div className="flex flex-col h-full relative">
+      <div ref={scrollContainerRef} onScroll={(e) => handleScroll(e, isNearBottomRef, setShowScrollBtn)} className="flex-1 overflow-y-auto p-4 space-y-3">
+        {!promptSnapshot && grouped.length === 0 && groupedLive.length === 0 && (
+          <p className="text-gray-400 text-sm text-center py-8">No messages yet</p>
+        )}
+
+        {promptSnapshot?.system_prompt && <PromptBubble label="System Prompt" content={promptSnapshot.system_prompt} />}
+        {promptSnapshot?.task_prompt && <PromptBubble label="Task Prompt" content={promptSnapshot.task_prompt} />}
+
+        {grouped.map((item, i) => {
+          if (item.kind === 'user') return <UserBubble key={`h-${i}`} msg={item.msg} />
+          if (item.kind === 'message') return <MessageBubble key={`h-${i}`} msg={item.msg} />
+          return <ToolSectionView key={`h-${i}`} invocations={item.invocations} loading={item.loading} defaultCollapsed={!taskActive} taskActive={taskActive} />
+        })}
+
+        {groupedLive.map((item, i) => {
+          if (item.kind === 'message') return <LiveMessageBubble key={`l-${i}`} event={item.event} />
+          if (item.kind === 'status') return <LiveStatusBubble key={`l-${i}`} event={item.event} />
+          return <ToolSectionView key={`l-${i}`} invocations={item.invocations} loading={item.loading} defaultCollapsed={false} taskActive={true} />
+        })}
+
+        {pendingMessages.map((msg) => <UserBubble key={`pending-${msg.id}`} msg={msg} />)}
+
+        {thinking && <ThinkingIndicator />}
+        <div ref={endRef} />
+      </div>
+
+      {showScrollBtn && <ScrollToBottomBtn onClick={scrollToBottom} />}
+
+      {taskActive && (
+        <div className="shrink-0 border-t border-gray-200 p-4">
+          <div className="flex gap-2 items-end">
+            <textarea value={messageInput} onChange={(e) => setMessageInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); canSend && messageInput.trim() && sendMutation.mutate(messageInput) } }}
+              placeholder={thinking ? 'Waiting for agent...' : 'Send a message... (Shift+Enter for newline)'}
+              disabled={thinking} rows={1}
+              onFocus={(e) => { e.currentTarget.rows = 4 }}
+              onBlur={(e) => { if (!e.currentTarget.value) e.currentTarget.rows = 1 }}
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none transition-all focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400" />
+            <div className="flex gap-1.5 shrink-0">
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadMutation.mutate(f); e.target.value = '' }} />
+              <button onClick={() => fileInputRef.current?.click()} disabled={thinking}
+                className="p-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50" title="Upload image">📎</button>
+              <button onClick={() => messageInput.trim() && sendMutation.mutate(messageInput)}
+                disabled={!canSend || !messageInput.trim()}
+                className="p-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed" title="Send">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19V5m0 0l-7 7m7-7l7 7" /></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================================
+// Tool Section — collapsible group of tool invocations
+// ============================================================
+
+function ToolSectionView({ invocations, loading, defaultCollapsed, taskActive }: {
+  invocations: ToolInvocation[]; loading: boolean; defaultCollapsed: boolean; taskActive: boolean
+}) {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed)
+  const [expandAll, setExpandAll] = useState(false)
+
+  if (invocations.length === 0 && !loading) return null
+
+  const failedCount = invocations.filter((inv) => inv.status === 'failed').length
+  const completedCount = invocations.filter((inv) => inv.status === 'completed').length
+  const runningCount = invocations.filter((inv) => inv.status === 'no_result').length
+  const isStillLoading = loading && taskActive
+
+  return (
+    <div className={`rounded-lg border overflow-hidden ${failedCount > 0 ? 'border-red-200 bg-red-50/30' : 'border-gray-200 bg-gray-50/50'}`}>
+      <div className="flex items-center">
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="flex-1 flex items-center gap-2 px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 transition-colors"
+        >
+          <svg className={`w-3 h-3 shrink-0 transition-transform ${collapsed ? '' : 'rotate-90'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+          <span className="font-medium">{invocations.length} tool call{invocations.length !== 1 ? 's' : ''}</span>
+          {completedCount > 0 && <span className="inline-flex items-center gap-1 text-green-600"><span className="w-1.5 h-1.5 rounded-full bg-green-400" />{completedCount}</span>}
+          {failedCount > 0 && <span className="inline-flex items-center gap-1 text-red-600"><span className="w-1.5 h-1.5 rounded-full bg-red-400" />{failedCount}</span>}
+          {runningCount > 0 && taskActive && <span className="inline-flex items-center gap-1 text-blue-500"><span className="w-1.5 h-1.5 rounded-full bg-blue-400" />{runningCount}</span>}
+          {runningCount > 0 && !taskActive && <span className="inline-flex items-center gap-1 text-gray-400"><span className="w-1.5 h-1.5 rounded-full bg-gray-400" />{runningCount}</span>}
+          {isStillLoading && (
+            <div className="w-3 h-3 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin shrink-0" />
+          )}
+        </button>
+        {!collapsed && (
+          <button
+            onClick={(e) => { e.stopPropagation(); setExpandAll(!expandAll) }}
+            className="shrink-0 p-1 mr-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+            title={expandAll ? 'Collapse all' : 'Expand all'}
+          >
+            {expandAll ? (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 14h16m-8-4V4m0 0L8 8m4-4l4 4M4 10h16m-8 4v6m0 0l-4-4m4 4l4-4" /></svg>
+            ) : (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16m-8-4v6m0 0l-4-4m4 4l4-4M12 12V6m0 0L8 10m4-4l4 4" /></svg>
+            )}
+          </button>
+        )}
+      </div>
+
+      {!collapsed && (
+        <div className="border-t border-gray-200 divide-y divide-gray-100">
+          {invocations.map((inv, i) => (
+            <ToolInvocationRow key={i} inv={inv} taskActive={taskActive} forceExpanded={expandAll} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const statusConfig = {
+  completed: { dot: 'bg-green-400', text: 'text-green-600', label: '' },
+  failed: { dot: 'bg-red-400', text: 'text-red-600', label: 'failed' },
+  running: { dot: 'bg-blue-400', text: 'text-blue-500', label: '' },
+  no_result: { dot: 'bg-gray-400', text: 'text-gray-400', label: '' },
+}
+
+function ToolInvocationRow({ inv, taskActive, forceExpanded }: { inv: ToolInvocation; taskActive: boolean; forceExpanded?: boolean }) {
+  const [localOverride, setLocalOverride] = useState<boolean | null>(null)
+  // Reset local override when forceExpanded changes
+  const prevForce = useRef(forceExpanded)
+  if (prevForce.current !== forceExpanded) {
+    prevForce.current = forceExpanded
+    setLocalOverride(null)
+  }
+  const expanded = localOverride !== null ? localOverride : (forceExpanded || false)
+  const isRunning = inv.status === 'no_result' && taskActive
+  const cfg = statusConfig[inv.status === 'no_result' && taskActive ? 'running' : inv.status]
 
   return (
     <div>
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">Task #{task.id}</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Issue #{task.issue_number} &middot; {task.type} &middot; {task.edges.project?.name}
-            {task.pr_number && <> &middot; PR #{task.pr_number}</>}
-          </p>
-          {workspacePath && <p className="text-xs text-gray-400 mt-1 font-mono">{workspacePath}</p>}
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <StatusBadge status={task.status} />
-          {task.status === 'running' && <button onClick={() => pauseMutation.mutate()} className="px-3 py-1 text-sm border rounded hover:bg-gray-50">Pause</button>}
-          {task.status === 'paused' && <button onClick={() => resumeMutation.mutate()} className="px-3 py-1 text-sm border rounded hover:bg-gray-50">Resume</button>}
-          {task.status === 'failed' && <button onClick={() => retryMutation.mutate()} className="px-3 py-1 text-sm border rounded hover:bg-gray-50">Retry</button>}
-          {isActiveStatus(task.status) && <button onClick={() => cancelMutation.mutate()} className="px-3 py-1 text-sm border border-red-300 text-red-600 rounded hover:bg-red-50">Cancel</button>}
-          {(task.status === 'succeeded' || task.status === 'running' || task.status === 'paused') && (
-            <button onClick={() => { if (confirm('This will merge the PR (if exists) and close the issue. Continue?')) completeMutation.mutate() }}
-              disabled={completeMutation.isPending}
-              className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
-              {completeMutation.isPending ? 'Completing...' : 'Complete'}
-            </button>
+      <button
+        onClick={() => setLocalOverride(!expanded)}
+        className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-gray-50 transition-colors ${inv.status === 'failed' ? 'bg-red-50/50' : ''}`}
+      >
+        {/* Status dot */}
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dot}`} />
+        <svg className={`w-3 h-3 shrink-0 text-gray-400 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+        <span className={`truncate ${inv.status === 'failed' ? 'text-red-600' : 'text-gray-600'}`}>{inv.text}</span>
+        {cfg.label && <span className={`shrink-0 font-mono uppercase text-[10px] ${cfg.text}`}>{cfg.label}</span>}
+        {isRunning && (
+          <div className="w-3 h-3 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin shrink-0 ml-auto" />
+        )}
+      </button>
+
+      {expanded && (
+        <div className="px-3 pb-2 pl-8">
+          {inv.hasResult && inv.result != null ? (
+            <ToolResultView result={inv.result} defaultExpanded={!!forceExpanded} />
+          ) : (
+            <div className="space-y-1">
+              <ToolCallView tools={inv.tools} />
+              {isRunning && (
+                <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-400">
+                  <div className="w-3 h-3 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" />
+                  <span>Running...</span>
+                </div>
+              )}
+              {inv.status === 'no_result' && !taskActive && (
+                <div className="px-3 py-1.5 text-xs text-gray-400">No result (task ended)</div>
+              )}
+            </div>
           )}
         </div>
-      </div>
+      )}
+    </div>
+  )
+}
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200 mb-4">
-        <div className="flex gap-4">
-          <button onClick={() => setActiveTab('messages')}
-            className={`pb-2 text-sm font-medium ${activeTab === 'messages' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}>
-            Messages ({historyMessages.length})
-          </button>
-          <button onClick={() => setActiveTab('events')}
-            className={`pb-2 text-sm font-medium ${activeTab === 'events' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}>
-            Events ({historyEvents.length + liveEvents.length})
-          </button>
-        </div>
-      </div>
+// ============================================================
+// Message bubbles
+// ============================================================
 
-      <div className="bg-white rounded-lg shadow">
-        {activeTab === 'messages' ? (
-          <div className="p-4">
-            <div className="space-y-3 max-h-[65vh] overflow-y-auto">
-              {historyMessages.length === 0 && liveEvents.length === 0 && <p className="text-gray-400 text-sm text-center py-8">No messages yet</p>}
-              {historyMessages.map((msg) => <MessageBubble key={msg.id} msg={msg} />)}
-              {liveEvents.map((e, i) => <LiveEventBubble key={`live-${i}`} event={e} />)}
-              {thinking && <ThinkingIndicator />}
-              <div ref={endRef} />
-            </div>
+function PromptBubble({ label, content }: { label: string; content: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const preview = content.length > 200 ? content.slice(0, 200) + '...' : content
 
-            {/* Input */}
-            {isActiveStatus(task.status) && (
-              <div className="mt-4">
-                {thinking && <div className="text-xs text-gray-400 mb-2 flex items-center gap-1"><span className="animate-pulse">Claude is thinking...</span></div>}
-                <div className="flex gap-2">
-                  <input value={messageInput} onChange={(e) => setMessageInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && canSend && messageInput.trim() && sendMutation.mutate(messageInput)}
-                    placeholder={thinking ? 'Waiting for Claude to finish...' : 'Send a message...'}
-                    disabled={thinking}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm disabled:bg-gray-50 disabled:text-gray-400" />
-                  <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadMutation.mutate(f); e.target.value = '' }} />
-                  <button onClick={() => fileInputRef.current?.click()} disabled={thinking}
-                    className="px-3 py-2 border border-gray-300 rounded text-sm hover:bg-gray-50 disabled:opacity-50" title="Upload image">
-                    📎
-                  </button>
-                  <button onClick={() => messageInput.trim() && sendMutation.mutate(messageInput)}
-                    disabled={!canSend || !messageInput.trim()}
-                    className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                    Send
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="p-4">
-            <div className="space-y-1 max-h-[65vh] overflow-y-auto font-mono text-xs">
-              {historyEvents.length === 0 && liveEvents.length === 0 && <p className="text-gray-400 text-sm text-center py-8 font-sans">No events yet</p>}
-              {historyEvents.map((event) => {
-                let payload: Record<string, unknown> = {}
-                try { payload = JSON.parse(event.payload_json) } catch {}
-                return (
-                  <div key={event.id} className="flex gap-2 py-1 border-b border-gray-50">
-                    <span className="text-gray-400 shrink-0">{new Date(event.created_at).toLocaleTimeString()}</span>
-                    <span className={`shrink-0 ${getEventColor(event.event_type)}`}>[{event.event_type}]</span>
-                    <span className="text-gray-700 break-all">{formatEventPayload(event.event_type, payload)}</span>
-                  </div>
-                )
-              })}
-              {liveEvents.map((event, i) => (
-                <div key={`live-${i}`} className="flex gap-2 py-1 border-b border-gray-50">
-                  <span className="text-gray-400 shrink-0">{event.time}</span>
-                  <span className={`shrink-0 ${getEventColor(event.type)}`}>[{event.type}]</span>
-                  <span className="text-gray-700 break-all">{formatEventPayload(event.type, event.data as Record<string, unknown>)}</span>
-                </div>
-              ))}
-              <div ref={endRef} />
-            </div>
+  return (
+    <div className="flex justify-end">
+      <div className="max-w-full sm:max-w-[85%] rounded-lg text-sm border border-gray-300 bg-gray-50 overflow-hidden">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-gray-100 transition-colors"
+        >
+          <span className="px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded text-[10px] font-bold font-mono uppercase shrink-0">{label}</span>
+          <span className="text-xs text-gray-400 truncate">{preview}</span>
+          <svg className={`w-3 h-3 shrink-0 text-gray-400 transition-transform ml-auto ${expanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+        {expanded && (
+          <div className="border-t border-gray-200 px-4 py-3 max-h-80 overflow-y-auto">
+            <Markdown className="text-xs text-gray-700 leading-relaxed">{content}</Markdown>
           </div>
         )}
       </div>
@@ -186,7 +651,97 @@ export default function TaskDetailPage() {
   )
 }
 
-// --- Thinking indicator ---
+function UserBubble({ msg }: { msg: SessionMessage }) {
+  const time = new Date(msg.created_at).toLocaleTimeString()
+  return (
+    <div className="flex justify-end">
+      <div className="max-w-full sm:max-w-[80%] px-4 py-2 rounded-lg text-sm bg-blue-600 text-white">
+        <pre className="whitespace-pre-wrap font-sans">{msg.content}</pre>
+        <div className="text-xs mt-1 text-blue-200">{time}</div>
+      </div>
+    </div>
+  )
+}
+
+function MessageBubble({ msg }: { msg: SessionMessage }) {
+  const time = new Date(msg.created_at).toLocaleTimeString()
+  const isResult = msg.content_type === 'result'
+
+  if (isResult) {
+    return (
+      <div className="flex justify-start">
+        <div className="max-w-full sm:max-w-[90%] rounded-lg text-sm border-l-4 border-blue-500 bg-gradient-to-r from-blue-50 to-white shadow-sm">
+          <div className="px-4 py-3">
+            <Markdown className="text-gray-900 text-sm leading-relaxed">{msg.content}</Markdown>
+            <div className="text-xs text-gray-400 mt-2">{time}</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex justify-start">
+      <div className="max-w-full sm:max-w-[80%] px-4 py-2 rounded-lg text-sm bg-gray-100 text-gray-800">
+        <Markdown>{msg.content}</Markdown>
+        <div className="text-xs mt-1 text-gray-400">{time}</div>
+      </div>
+    </div>
+  )
+}
+
+function LiveMessageBubble({ event }: { event: LiveEvent }) {
+  const data = event.data as Record<string, unknown>
+  const content = data.content as string
+  if (!content) return null
+
+  if (event.type === 'message.completed') {
+    return (
+      <div className="flex justify-start">
+        <div className="max-w-full sm:max-w-[90%] rounded-lg text-sm border-l-4 border-blue-500 bg-gradient-to-r from-blue-50 to-white shadow-sm">
+          <div className="px-4 py-3">
+            <Markdown className="text-gray-900 text-sm leading-relaxed">{content}</Markdown>
+            <div className="text-xs text-gray-400 mt-2">{event.time}</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex justify-start">
+      <div className="max-w-full sm:max-w-[80%] px-4 py-2 rounded-lg text-sm bg-gray-100 text-gray-800">
+        <Markdown>{content}</Markdown>
+        <div className="text-xs mt-1 text-gray-400">{event.time}</div>
+      </div>
+    </div>
+  )
+}
+
+function LiveStatusBubble({ event }: { event: LiveEvent }) {
+  const data = event.data as Record<string, unknown>
+  if (event.type === 'task.completed')
+    return <div className="text-center py-2"><span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs">Task completed</span></div>
+  if (event.type === 'task.failed')
+    return <div className="text-center py-2"><span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs">Task failed: {data.error as string}</span></div>
+  if (event.type === 'run.status' && data.status === 'awaiting_user_confirmation')
+    return <div className="text-center py-2"><span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs">Task finished, waiting for manual completion</span></div>
+  return null
+}
+
+function ScrollToBottomBtn({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="absolute bottom-20 right-6 w-8 h-8 rounded-full bg-white border border-gray-300 shadow-md flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors z-10"
+      title="Scroll to bottom"
+    >
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+      </svg>
+    </button>
+  )
+}
 
 function ThinkingIndicator() {
   return (
@@ -205,140 +760,98 @@ function ThinkingIndicator() {
   )
 }
 
-// --- Message rendering ---
+// ============================================================
+// Events Tab
+// ============================================================
 
-function MessageBubble({ msg }: { msg: { id: number; role: string; content_type: string; content: string; created_at: string } }) {
-  const time = new Date(msg.created_at).toLocaleTimeString()
-
-  if (msg.role === 'user') {
-    return (
-      <div className="flex justify-end">
-        <div className="max-w-[80%] px-4 py-2 rounded-lg text-sm bg-blue-600 text-white">
-          <pre className="whitespace-pre-wrap font-sans">{msg.content}</pre>
-          <div className="text-xs mt-1 text-blue-200">{time}</div>
-        </div>
-      </div>
-    )
-  }
-
-  if (msg.content_type === 'tool_call') {
-    let data: Record<string, unknown> = {}
-    try { data = JSON.parse(msg.content) } catch {}
-    const tools = (data.tools as Array<Record<string, unknown>>) || []
-    const text = (data.text as string) || ''
-    return (
-      <div className="flex justify-start">
-        <div className="max-w-[90%] space-y-2">
-          {text && (
-            <div className="px-4 py-2 rounded-lg text-sm bg-gray-100 text-gray-800 prose prose-sm max-w-none">
-              <Markdown>{text}</Markdown>
-            </div>
-          )}
-          <ToolCallView tools={tools as Array<{ name: string; input: Record<string, unknown> }>} />
-          <div className="text-xs text-gray-400">{time}</div>
-        </div>
-      </div>
-    )
-  }
-
-  if (msg.content_type === 'tool_result') {
-    let data: Record<string, unknown> = {}
-    try { data = JSON.parse(msg.content) } catch {}
-    return (
-      <div className="flex justify-start">
-        <div className="max-w-[90%]">
-          <ToolResultView result={data.result || data} />
-          <div className="text-xs text-gray-400 mt-1">{time}</div>
-        </div>
-      </div>
-    )
-  }
-
-  if (msg.content_type === 'result') {
-    return (
-      <div className="flex justify-start">
-        <div className="max-w-[80%] px-4 py-2 rounded-lg text-sm bg-blue-50 border border-blue-200">
-          <span className="px-1.5 py-0.5 bg-blue-200 text-blue-800 rounded text-xs font-bold font-mono mb-2 inline-block">COMPLETED</span>
-          <div className="prose prose-sm max-w-none text-blue-900">
-            <Markdown>{msg.content}</Markdown>
-          </div>
-          <div className="text-xs text-blue-400 mt-1">{time}</div>
-        </div>
-      </div>
-    )
-  }
-
-  // Regular text (assistant message.delta)
+function EventsTab({ historyEvents, liveEvents, endRef, scrollContainerRef, isNearBottomRef, showScrollBtn, setShowScrollBtn }: {
+  historyEvents: SessionEvent[]; liveEvents: LiveEvent[]; endRef: React.RefObject<HTMLDivElement | null>
+  scrollContainerRef: React.RefObject<HTMLDivElement | null>; isNearBottomRef: React.MutableRefObject<boolean>
+  showScrollBtn: boolean; setShowScrollBtn: (v: boolean) => void
+}) {
   return (
-    <div className="flex justify-start">
-      <div className="max-w-[80%] px-4 py-2 rounded-lg text-sm bg-gray-100 text-gray-800">
-        <div className="prose prose-sm max-w-none">
-          <Markdown>{msg.content}</Markdown>
-        </div>
-        <div className="text-xs mt-1 text-gray-400">{time}</div>
+    <div className="flex flex-col h-full p-4 relative">
+      <div ref={scrollContainerRef} onScroll={(e) => handleScroll(e, isNearBottomRef, setShowScrollBtn)} className="flex-1 overflow-y-auto space-y-1 font-mono text-xs">
+        {historyEvents.length === 0 && liveEvents.length === 0 && (
+          <p className="text-gray-400 text-sm text-center py-8 font-sans">No events yet</p>
+        )}
+        {historyEvents.map((event) => {
+          let payload: Record<string, unknown> = {}
+          try { payload = JSON.parse(event.payload_json) } catch {}
+          return (
+            <div key={event.id} className="flex gap-2 py-1 border-b border-gray-50">
+              <span className="text-gray-400 shrink-0">{new Date(event.created_at).toLocaleTimeString()}</span>
+              <span className={`shrink-0 ${getEventColor(event.event_type)}`}>[{event.event_type}]</span>
+              <span className="text-gray-700 break-all">{formatEventPayload(event.event_type, payload)}</span>
+            </div>
+          )
+        })}
+        {liveEvents.map((event, i) => (
+          <div key={`live-${i}`} className="flex gap-2 py-1 border-b border-gray-50">
+            <span className="text-gray-400 shrink-0">{event.time}</span>
+            <span className={`shrink-0 ${getEventColor(event.type)}`}>[{event.type}]</span>
+            <span className="text-gray-700 break-all">{formatEventPayload(event.type, event.data as Record<string, unknown>)}</span>
+          </div>
+        ))}
+        <div ref={endRef} />
       </div>
+      {showScrollBtn && <ScrollToBottomBtn onClick={() => {
+        endRef.current?.scrollIntoView({ behavior: 'smooth' })
+        isNearBottomRef.current = true
+        setShowScrollBtn(false)
+      }} />}
     </div>
   )
 }
 
-function LiveEventBubble({ event }: { event: { type: string; data: unknown; time: string } }) {
-  const data = event.data as Record<string, unknown>
-  if (!data) return null
-  if (event.type === 'run.step' || event.type === 'run.status' || event.type === 'connected') return null
+// ============================================================
+// Issue & PR Tabs
+// ============================================================
 
-  if (event.type === 'message.delta' || event.type === 'message.completed') {
-    const content = data.content as string
-    if (!content) return null
-    return (
-      <div className="flex justify-start">
-        <div className="max-w-[80%] px-4 py-2 rounded-lg text-sm bg-gray-100 text-gray-800">
-          <div className="prose prose-sm max-w-none"><Markdown>{content}</Markdown></div>
-          <div className="text-xs mt-1 text-gray-400">{event.time}</div>
-        </div>
+function IssueTab({ issue, repoUrl }: { issue?: RepoIssue; repoUrl?: string }) {
+  if (!issue) return <div className="p-6 text-sm text-gray-500">Issue data unavailable.</div>
+  return (
+    <div className="p-6 space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <a href={`${repoUrl}/issues/${issue.number}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">Issue #{issue.number}</a>
+        <span className="text-sm text-gray-500">by <a href={`https://github.com/${issue.user}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">@{issue.user}</a></span>
+        <span className="text-sm text-gray-500">Created {formatTimestamp(issue.created_at)}</span>
+        <span className="text-sm text-gray-500">Updated {formatTimestamp(issue.updated_at)}</span>
       </div>
-    )
-  }
-
-  if (event.type === 'tool.call') {
-    const tools = (data.tools as Array<{ name: string; input: Record<string, unknown> }>) || []
-    const text = data.text as string || ''
-    return (
-      <div className="flex justify-start">
-        <div className="max-w-[90%] space-y-2">
-          {text && <div className="px-4 py-2 rounded-lg text-sm bg-gray-100 prose prose-sm max-w-none"><Markdown>{text}</Markdown></div>}
-          <ToolCallView tools={tools} />
-          <div className="text-xs text-gray-400">{event.time}</div>
-        </div>
+      <h2 className="text-xl font-semibold">
+        <a href={`${repoUrl}/issues/${issue.number}`} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 hover:underline">{issue.title}</a>
+      </h2>
+      <div className="flex flex-wrap gap-2">
+        {issue.labels?.map((label) => <span key={label} className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">{label}</span>)}
       </div>
-    )
-  }
-
-  if (event.type === 'tool.result') {
-    return (
-      <div className="flex justify-start">
-        <div className="max-w-[90%]"><ToolResultView result={data.result || data} /></div>
-      </div>
-    )
-  }
-
-  if (event.type === 'error') {
-    return (
-      <div className="flex justify-start">
-        <div className="max-w-[90%] px-3 py-2 rounded border border-red-200 bg-red-50 text-sm text-red-700">
-          <span className="font-mono text-xs font-bold">ERROR </span>{data.message as string}
-        </div>
-      </div>
-    )
-  }
-
-  if (event.type === 'task.completed') {
-    return <div className="text-center py-2"><span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs">Task completed</span></div>
-  }
-  if (event.type === 'task.failed') {
-    return <div className="text-center py-2"><span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs">Task failed: {data.error as string}</span></div>
-  }
-  return null
+      <Markdown>{issue.body || '*No issue body*'}</Markdown>
+    </div>
+  )
 }
+
+function PRTab({ pullRequest }: { pullRequest?: RepoPR }) {
+  if (!pullRequest) return <div className="p-6 text-sm text-gray-500">No PR associated with this task.</div>
+  return (
+    <div className="p-6 space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <a href={pullRequest.html_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">PR #{pullRequest.number}</a>
+        {pullRequest.user && <span className="text-sm text-gray-500">by <a href={`https://github.com/${pullRequest.user}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">@{pullRequest.user}</a></span>}
+        <span className="text-sm text-gray-500">{pullRequest.head} {'->'} {pullRequest.base}</span>
+        <span className="text-sm text-gray-500">Created {formatTimestamp(pullRequest.created_at)}</span>
+        <span className="text-sm text-gray-500">Updated {formatTimestamp(pullRequest.updated_at)}</span>
+      </div>
+      <h2 className="text-xl font-semibold">
+        <a href={pullRequest.html_url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 hover:underline">{pullRequest.title}</a>
+      </h2>
+      <div className="text-sm text-gray-500">State: {pullRequest.state}</div>
+      <Markdown>{pullRequest.body || '*No PR body*'}</Markdown>
+    </div>
+  )
+}
+
+// ============================================================
+// Helpers
+// ============================================================
 
 function isActiveStatus(status: TaskStatus): boolean {
   return ['running', 'waiting_user', 'queued', 'paused'].includes(status)
@@ -355,4 +868,46 @@ function getEventColor(type: string): string {
 function formatEventPayload(eventType: string, payload: Record<string, unknown>): string {
   if (eventType === 'run.step') return `${payload.step}: ${payload.detail}`
   return JSON.stringify(payload)
+}
+
+function formatTimestamp(value?: string): string {
+  if (!value) return 'unknown'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString()
+}
+
+function normalizeToolCallData(content: string): { tools: Array<{ name: string; input: Record<string, unknown> }>; text?: string } {
+  let data: Record<string, unknown> = {}
+  try { data = JSON.parse(content) } catch {}
+  return normalizeToolCallEventData(data)
+}
+
+function normalizeToolCallEventData(data: Record<string, unknown>): { tools: Array<{ name: string; input: Record<string, unknown> }>; text?: string } {
+  const tools = (data.tools as Array<{ name: string; input: Record<string, unknown> }>) || []
+  const text = (data.text as string) || ''
+  if (tools.length > 0 || text) return { tools, text }
+
+  const item = data.item as Record<string, unknown> | undefined
+  const command = (item?.command as string) || (data.command as string)
+  if (command) {
+    return { text: '', tools: [{ name: 'Bash', input: { command } }] }
+  }
+  return { tools: [], text }
+}
+
+function normalizeToolResultData(content: string): unknown {
+  let data: Record<string, unknown> = {}
+  try { data = JSON.parse(content) } catch {}
+  return normalizeToolResultEventData(data)
+}
+
+function normalizeToolResultEventData(data: Record<string, unknown>): unknown {
+  if (data.result) return data.result
+  const item = data.item as Record<string, unknown> | undefined
+  if (item?.aggregated_output || item?.command) {
+    return { command: item.command, output: item.aggregated_output, status: item.status, exit_code: item.exit_code }
+  }
+  if (data.output || data.command) return data
+  return data
 }

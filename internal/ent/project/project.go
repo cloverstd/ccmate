@@ -3,6 +3,7 @@
 package project
 
 import (
+	"fmt"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -24,6 +25,12 @@ const (
 	FieldDefaultBranch = "default_branch"
 	// FieldAutoMode holds the string denoting the auto_mode field in the database.
 	FieldAutoMode = "auto_mode"
+	// FieldDefaultAgentProfileID holds the string denoting the default_agent_profile_id field in the database.
+	FieldDefaultAgentProfileID = "default_agent_profile_id"
+	// FieldDefaultPromptTemplateID holds the string denoting the default_prompt_template_id field in the database.
+	FieldDefaultPromptTemplateID = "default_prompt_template_id"
+	// FieldPromptTemplateScope holds the string denoting the prompt_template_scope field in the database.
+	FieldPromptTemplateScope = "prompt_template_scope"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -58,6 +65,9 @@ var Columns = []string{
 	FieldGitProvider,
 	FieldDefaultBranch,
 	FieldAutoMode,
+	FieldDefaultAgentProfileID,
+	FieldDefaultPromptTemplateID,
+	FieldPromptTemplateScope,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
@@ -91,6 +101,33 @@ var (
 	UpdateDefaultUpdatedAt func() time.Time
 )
 
+// PromptTemplateScope defines the type for the "prompt_template_scope" enum field.
+type PromptTemplateScope string
+
+// PromptTemplateScopeProjectOnly is the default value of the PromptTemplateScope enum.
+const DefaultPromptTemplateScope = PromptTemplateScopeProjectOnly
+
+// PromptTemplateScope values.
+const (
+	PromptTemplateScopeGlobalOnly  PromptTemplateScope = "global_only"
+	PromptTemplateScopeProjectOnly PromptTemplateScope = "project_only"
+	PromptTemplateScopeMerged      PromptTemplateScope = "merged"
+)
+
+func (pts PromptTemplateScope) String() string {
+	return string(pts)
+}
+
+// PromptTemplateScopeValidator is a validator for the "prompt_template_scope" field enum values. It is called by the builders before save.
+func PromptTemplateScopeValidator(pts PromptTemplateScope) error {
+	switch pts {
+	case PromptTemplateScopeGlobalOnly, PromptTemplateScopeProjectOnly, PromptTemplateScopeMerged:
+		return nil
+	default:
+		return fmt.Errorf("project: invalid enum value for prompt_template_scope field: %q", pts)
+	}
+}
+
 // OrderOption defines the ordering options for the Project queries.
 type OrderOption func(*sql.Selector)
 
@@ -122,6 +159,21 @@ func ByDefaultBranch(opts ...sql.OrderTermOption) OrderOption {
 // ByAutoMode orders the results by the auto_mode field.
 func ByAutoMode(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAutoMode, opts...).ToFunc()
+}
+
+// ByDefaultAgentProfileID orders the results by the default_agent_profile_id field.
+func ByDefaultAgentProfileID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDefaultAgentProfileID, opts...).ToFunc()
+}
+
+// ByDefaultPromptTemplateID orders the results by the default_prompt_template_id field.
+func ByDefaultPromptTemplateID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDefaultPromptTemplateID, opts...).ToFunc()
+}
+
+// ByPromptTemplateScope orders the results by the prompt_template_scope field.
+func ByPromptTemplateScope(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPromptTemplateScope, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

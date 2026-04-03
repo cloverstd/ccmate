@@ -37,12 +37,14 @@ export const settingsApi = {
   get: () => request<Record<string, string>>('/settings'),
   update: (data: Record<string, string>) => request<{ status: string }>('/settings', { method: 'PUT', body: JSON.stringify(data) }),
   checkGitHubPermissions: () => request<{ configured: boolean; valid?: boolean; user?: string; scopes?: string; error?: string }>('/github/permissions'),
+  testNotification: () => request<{ status: string }>('/notifications/test', { method: 'POST' }),
 }
 
 // Projects
 export interface Project {
   id: number; name: string; repo_url: string; git_provider: string
-  default_branch: string; auto_mode: boolean
+  default_branch: string; auto_mode: boolean; default_agent_profile_id: number | null; default_prompt_template_id: number | null
+  prompt_template_scope: 'global_only' | 'project_only' | 'merged'
   created_at: string; updated_at: string
 }
 
@@ -51,14 +53,14 @@ export interface GitHubRepo {
 }
 
 export interface LabelRuleConfig { label: string; trigger_mode: string }
-export interface RepoIssue { number: number; title: string; body: string; labels: string[]; state: string; user: string }
-export interface RepoPR { number: number; title: string; body: string; state: string; html_url: string; head: string; base: string }
-export interface PromptTemplate { id: number; name: string; system_prompt: string; task_prompt: string; is_builtin: boolean; created_at: string }
+export interface RepoIssue { number: number; title: string; body: string; labels: string[]; state: string; user: string; created_at: string; updated_at: string }
+export interface RepoPR { number: number; title: string; body: string; state: string; user: string; html_url: string; head: string; base: string; created_at: string; updated_at: string }
+export interface PromptTemplate { id: number; name: string; system_prompt: string; task_prompt: string; is_builtin: boolean; project_id: number | null; created_at: string }
 export interface AgentProfile { id: number; provider: string; model: string; supports_image: boolean; supports_resume: boolean; config_json: string }
 
 export const githubApi = { listRepos: () => request<GitHubRepo[]>('/github/repos') }
 
-export interface BranchInfo { name: string; hash: string; message: string; current: boolean }
+export interface BranchInfo { name: string; hash: string; message?: string; current?: boolean }
 export interface CommitInfo { hash: string; message: string; author: string; date: string }
 export interface TagInfo { name: string; hash: string }
 export interface RepoGitInfo { project_id: number; repo_path: string; branches: BranchInfo[] | null; tags: TagInfo[] | null }
@@ -79,7 +81,13 @@ export const projectsApi = {
 export const labelRulesApi = { list: () => request<LabelRuleConfig[]>('/label-rules') }
 
 export const promptsApi = {
-  list: () => request<PromptTemplate[]>('/prompt-templates'),
+  list: (params?: { scope?: 'global' | 'project' | 'all'; project_id?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.scope) qs.set('scope', params.scope)
+    if (params?.project_id) qs.set('project_id', String(params.project_id))
+    const query = qs.toString()
+    return request<PromptTemplate[]>(`/prompt-templates${query ? `?${query}` : ''}`)
+  },
   create: (data: Partial<PromptTemplate>) => request<PromptTemplate>('/prompt-templates', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: number, data: Partial<PromptTemplate>) => request<PromptTemplate>(`/prompt-templates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id: number) => request<void>(`/prompt-templates/${id}`, { method: 'DELETE' }),
@@ -97,15 +105,20 @@ export type TaskStatus = 'pending' | 'queued' | 'running' | 'paused' | 'waiting_
 export type TaskType = 'issue_implementation' | 'review_fix' | 'manual_followup'
 export interface Task {
   id: number; issue_number: number; pr_number: number | null; type: TaskType
-  status: TaskStatus; priority: number; trigger_source: string
+  status: TaskStatus; priority: number; trigger_source: string; agent_profile_id: number | null
   current_session_id: number | null; created_at: string; updated_at: string
-  edges: { project?: Project; sessions?: Session[] }
+  edges: { project?: Project; sessions?: Session[]; prompt_snapshot?: PromptSnapshot | null }
 }
 export interface Session { id: number; status: string; started_at: string | null; ended_at: string | null; edges: { messages?: SessionMessage[]; events?: SessionEvent[] } }
 export interface SessionMessage { id: number; role: string; content_type: string; content: string; sequence: number; created_at: string }
 export interface SessionEvent { id: number; event_type: string; payload_json: string; sequence: number; created_at: string }
 
-export interface TaskDetail { task: Task; workspace_path: string }
+export interface TaskGitSummary { branch: string; latest_commit?: CommitInfo | null; branches?: BranchInfo[] | null }
+export interface PromptSnapshot { id: number; system_prompt: string; task_prompt: string; model_name: string; model_version: string; created_at: string }
+export interface TaskDetail {
+  task: Task; workspace_path: string; issue?: RepoIssue | null; pull_request?: RepoPR | null
+  git?: TaskGitSummary | null; agent_profile?: AgentProfile | null
+}
 
 export const tasksApi = {
   list: (params?: { status?: string; project_id?: string }) => {
@@ -113,15 +126,15 @@ export const tasksApi = {
     return request<Task[]>(`/tasks${query ? '?' + query : ''}`)
   },
   get: (id: number) => request<TaskDetail>(`/tasks/${id}`),
-  create: (data: { project_id: number; issue_number: number; type?: string }) =>
+  create: (data: { project_id: number; issue_number: number; type?: string; agent_profile_id?: number }) =>
     request<Task>('/tasks', { method: 'POST', body: JSON.stringify(data) }),
-  createFromPrompt: (data: { project_id: number; title: string; body: string; labels?: string[] }) =>
+  createFromPrompt: (data: { project_id: number; title: string; body: string; labels?: string[]; agent_profile_id?: number }) =>
     request<{ issue: RepoIssue; task: Task }>('/tasks/from-prompt', { method: 'POST', body: JSON.stringify(data) }),
   pause: (id: number) => request<void>(`/tasks/${id}/pause`, { method: 'POST' }),
   resume: (id: number) => request<void>(`/tasks/${id}/resume`, { method: 'POST' }),
   retry: (id: number) => request<void>(`/tasks/${id}/retry`, { method: 'POST' }),
   cancel: (id: number) => request<void>(`/tasks/${id}/cancel`, { method: 'POST' }),
-  complete: (id: number) => request<{ status: string; actions: string[] }>(`/tasks/${id}/complete`, { method: 'POST' }),
+  complete: (id: number, data: { close_issue: boolean; merge_pr: boolean }) => request<{ status: string; actions: string[] }>(`/tasks/${id}/complete`, { method: 'POST', body: JSON.stringify(data) }),
   sendMessage: (id: number, content: string) => request<SessionMessage>(`/tasks/${id}/messages`, {
     method: 'POST', body: JSON.stringify({ content, content_type: 'text' }),
   }),

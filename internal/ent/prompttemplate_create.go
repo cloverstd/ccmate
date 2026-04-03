@@ -69,6 +69,20 @@ func (_c *PromptTemplateCreate) SetNillableIsBuiltin(v *bool) *PromptTemplateCre
 	return _c
 }
 
+// SetProjectID sets the "project_id" field.
+func (_c *PromptTemplateCreate) SetProjectID(v int) *PromptTemplateCreate {
+	_c.mutation.SetProjectID(v)
+	return _c
+}
+
+// SetNillableProjectID sets the "project_id" field if the given value is not nil.
+func (_c *PromptTemplateCreate) SetNillableProjectID(v *int) *PromptTemplateCreate {
+	if v != nil {
+		_c.SetProjectID(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *PromptTemplateCreate) SetCreatedAt(v time.Time) *PromptTemplateCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -235,6 +249,10 @@ func (_c *PromptTemplateCreate) createSpec() (*PromptTemplate, *sqlgraph.CreateS
 	if value, ok := _c.mutation.IsBuiltin(); ok {
 		_spec.SetField(prompttemplate.FieldIsBuiltin, field.TypeBool, value)
 		_node.IsBuiltin = value
+	}
+	if value, ok := _c.mutation.ProjectID(); ok {
+		_spec.SetField(prompttemplate.FieldProjectID, field.TypeInt, value)
+		_node.ProjectID = &value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(prompttemplate.FieldCreatedAt, field.TypeTime, value)

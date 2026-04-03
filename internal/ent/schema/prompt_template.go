@@ -19,6 +19,7 @@ func (PromptTemplate) Fields() []ent.Field {
 		field.Text("system_prompt").Default(""),
 		field.Text("task_prompt").Default(""),
 		field.Bool("is_builtin").Default(false),
+		field.Int("project_id").Optional().Nillable(),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
 	}

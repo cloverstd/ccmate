@@ -112,6 +112,9 @@ var (
 		{Name: "git_provider", Type: field.TypeString, Default: "github"},
 		{Name: "default_branch", Type: field.TypeString, Default: "main"},
 		{Name: "auto_mode", Type: field.TypeBool, Default: false},
+		{Name: "default_agent_profile_id", Type: field.TypeInt, Nullable: true},
+		{Name: "default_prompt_template_id", Type: field.TypeInt, Nullable: true},
+		{Name: "prompt_template_scope", Type: field.TypeEnum, Enums: []string{"global_only", "project_only", "merged"}, Default: "project_only"},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 	}
@@ -156,6 +159,7 @@ var (
 		{Name: "system_prompt", Type: field.TypeString, Size: 2147483647, Default: ""},
 		{Name: "task_prompt", Type: field.TypeString, Size: 2147483647, Default: ""},
 		{Name: "is_builtin", Type: field.TypeBool, Default: false},
+		{Name: "project_id", Type: field.TypeInt, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 	}
@@ -299,6 +303,7 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "issue_number", Type: field.TypeInt},
 		{Name: "pr_number", Type: field.TypeInt, Nullable: true},
+		{Name: "agent_profile_id", Type: field.TypeInt, Nullable: true},
 		{Name: "type", Type: field.TypeEnum, Enums: []string{"issue_implementation", "review_fix", "manual_followup"}},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"pending", "queued", "running", "paused", "waiting_user", "succeeded", "failed", "cancelled"}, Default: "queued"},
 		{Name: "priority", Type: field.TypeInt, Default: 0},
@@ -316,7 +321,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "tasks_projects_tasks",
-				Columns:    []*schema.Column{TasksColumns[10]},
+				Columns:    []*schema.Column{TasksColumns[11]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -325,7 +330,7 @@ var (
 			{
 				Name:    "task_status",
 				Unique:  false,
-				Columns: []*schema.Column{TasksColumns[4]},
+				Columns: []*schema.Column{TasksColumns[5]},
 			},
 			{
 				Name:    "task_issue_number",

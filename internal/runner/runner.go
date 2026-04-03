@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 	"github.com/cloverstd/ccmate/internal/ent"
 	"github.com/cloverstd/ccmate/internal/ent/project"
 	"github.com/cloverstd/ccmate/internal/ent/projectlabelrule"
+	"github.com/cloverstd/ccmate/internal/ent/prompttemplate"
 	"github.com/cloverstd/ccmate/internal/ent/session"
 	"github.com/cloverstd/ccmate/internal/ent/sessionmessage"
 	enttask "github.com/cloverstd/ccmate/internal/ent/task"
@@ -29,22 +31,24 @@ import (
 
 // Runner manages the execution of a single task.
 type Runner struct {
-	client       *ent.Client
-	settingsMgr  *settings.Manager
-	broker       *sse.Broker
-	gitProvider  gitprovider.GitProvider
-	agentAdapter agentprovider.AgentAdapter
+	client        *ent.Client
+	settingsMgr   *settings.Manager
+	broker        *sse.Broker
+	gitProvider   gitprovider.GitProvider
+	agentRegistry *agentprovider.Registry
 
 	// OnHandleReady is called when the agent session handle is ready, allowing
 	// the scheduler to forward user input to the agent.
-	OnHandleReady func(h *agentprovider.SessionHandle)
+	OnHandleReady func(agentprovider.AgentAdapter, *agentprovider.SessionHandle)
+	// OnStatusChange is called after the runner directly changes task status.
+	OnStatusChange func(ctx context.Context, taskID int, oldStatus, newStatus string)
 }
 
 func New(
 	client *ent.Client, settingsMgr *settings.Manager, broker *sse.Broker,
-	gitProvider gitprovider.GitProvider, agentAdapter agentprovider.AgentAdapter,
+	gitProvider gitprovider.GitProvider, agentRegistry *agentprovider.Registry,
 ) *Runner {
-	return &Runner{client: client, settingsMgr: settingsMgr, broker: broker, gitProvider: gitProvider, agentAdapter: agentAdapter}
+	return &Runner{client: client, settingsMgr: settingsMgr, broker: broker, gitProvider: gitProvider, agentRegistry: agentRegistry}
 }
 
 // RunTask executes a task end-to-end.
@@ -101,7 +105,10 @@ func (r *Runner) RunTask(ctx context.Context, taskID int) error {
 	branchName := ws.BranchName(t.IssueNumber)
 
 	var systemPrompt, taskPrompt string
-	modelName, modelVersion := r.resolveModelInfo(ctx)
+	agentAdapter, modelName, modelVersion, err := r.resolveAgent(ctx, t)
+	if err != nil {
+		return r.failTask(ctx, taskID, err)
+	}
 
 	if isResume {
 		// === RESUME MODE ===
@@ -165,6 +172,19 @@ func (r *Runner) RunTask(ctx context.Context, taskID int) error {
 
 		builder := prompt.NewBuilder()
 		r.loadProjectPromptTemplate(ctx, proj, builder)
+		builder.WithTemplateVars(prompt.TemplateVars{
+			IssueNumber:  issue.Number,
+			IssueTitle:   issue.Title,
+			IssueBody:    issue.Body,
+			IssueLabels:  issue.Labels,
+			IssueUser:    issue.User,
+			IssueLink:    fmt.Sprintf("https://github.com/%s/issues/%d", repo.FullName(), issue.Number),
+			RepoOwner:    repo.Owner,
+			RepoName:     repo.Name,
+			RepoFullName: repo.FullName(),
+			TaskType:     t.Type.String(),
+			BranchName:   branchName,
+		})
 		systemPrompt = builder.BuildSystemPrompt()
 
 		if t.Type == enttask.TypeReviewFix && t.PrNumber != nil {
@@ -192,18 +212,18 @@ func (r *Runner) RunTask(ctx context.Context, taskID int) error {
 		SetModelName(modelName).SetModelVersion(modelVersion).Save(ctx)
 
 	logStep("agent_start", fmt.Sprintf("Starting agent (resume=%v, model=%s)", isResume, modelName))
-	handle, err := r.agentAdapter.StartSession(ctx, agentprovider.StartSessionRequest{
+	handle, err := agentAdapter.StartSession(ctx, agentprovider.StartSessionRequest{
 		WorkDir: ws.RepoPath, SystemPrompt: systemPrompt, TaskPrompt: taskPrompt,
 		ResumeSessionID: resumeSessionID,
 	})
 	if err != nil {
 		return r.failTask(ctx, taskID, fmt.Errorf("starting agent: %w", err))
 	}
-	defer r.agentAdapter.Close(ctx, handle)
+	defer agentAdapter.Close(ctx, handle)
 
 	// Register handle for user input forwarding
 	if r.OnHandleReady != nil {
-		r.OnHandleReady(handle)
+		r.OnHandleReady(agentAdapter, handle)
 	}
 
 	// Log debug info from the agent adapter (command line, args, env, etc.)
@@ -213,13 +233,13 @@ func (r *Runner) RunTask(ctx context.Context, taskID int) error {
 		}
 	}
 	if debug {
-		caps := r.agentAdapter.Capabilities()
+		caps := agentAdapter.Capabilities()
 		logStep("debug_agent_caps", fmt.Sprintf("image=%v, resume=%v, streaming=%v",
 			caps.SupportsImage, caps.SupportsResume, caps.SupportsStreaming))
 	}
 
 	logStep("agent_streaming", "Starting event stream from agent")
-	eventCh, err := r.agentAdapter.StreamEvents(ctx, handle)
+	eventCh, err := agentAdapter.StreamEvents(ctx, handle)
 	if err != nil {
 		return r.failTask(ctx, taskID, fmt.Errorf("streaming events: %w", err))
 	}
@@ -355,14 +375,44 @@ func (r *Runner) RunTask(ctx context.Context, taskID int) error {
 		logStep("no_changes", "No code changes detected")
 	}
 
-	_, err = r.client.Task.UpdateOneID(taskID).SetStatus(enttask.StatusSucceeded).Save(ctx)
-	if err != nil {
-		return fmt.Errorf("marking task succeeded: %w", err)
+	// Detect PR created by agent if we don't have one yet
+	if t.PrNumber == nil {
+		r.detectAgentPR(ctx, taskID, repo, ws.RepoPath, logStep)
 	}
 
-	r.broker.Publish(topic, sse.Event{Type: "task.completed", Data: map[string]interface{}{"task_id": taskID, "status": "succeeded"}})
-	slog.Info("task completed successfully", "task_id", taskID)
+	_, err = r.client.Task.UpdateOneID(taskID).SetStatus(enttask.StatusWaitingUser).Save(ctx)
+	if err != nil {
+		return fmt.Errorf("marking task waiting_user: %w", err)
+	}
+
+	if r.OnStatusChange != nil {
+		r.OnStatusChange(ctx, taskID, string(model.TaskStatusRunning), string(model.TaskStatusWaitingUser))
+	}
+	r.broker.Publish(topic, sse.Event{Type: "run.status", Data: map[string]interface{}{"task_id": taskID, "status": "awaiting_user_confirmation"}})
+	slog.Info("task finished and awaiting user confirmation", "task_id", taskID)
 	return nil
+}
+
+// detectAgentPR checks if the agent created a PR during its session and saves the PR number.
+// It reads the current branch from the workspace and searches GitHub for a matching PR.
+func (r *Runner) detectAgentPR(ctx context.Context, taskID int, repo model.RepoRef, repoPath string, logStep func(string, string)) {
+	if r.gitProvider == nil {
+		return
+	}
+
+	// Try current branch in workspace
+	currentBranch, err := CurrentBranch(ctx, repoPath)
+	if err != nil || currentBranch == "" {
+		return
+	}
+
+	pr, err := r.gitProvider.FindPullRequestByHead(ctx, repo, currentBranch)
+	if err != nil || pr == nil {
+		return
+	}
+
+	logStep("pr_detected", fmt.Sprintf("Detected agent-created PR #%d: %s", pr.Number, pr.HTMLURL))
+	_, _ = r.client.Task.UpdateOneID(taskID).SetPrNumber(pr.Number).Save(ctx)
 }
 
 // loadPriorSessionHistory loads messages from a prior session for the same issue.
@@ -392,36 +442,186 @@ func (r *Runner) loadPriorSessionHistory(ctx context.Context, t *ent.Task) strin
 	return strings.Join(parts, "\n\n")
 }
 
-// loadProjectPromptTemplate loads the PromptTemplate associated with the project's label rules.
+// applyTemplate applies a single template's system_prompt and task_prompt to the builder.
+func applyTemplate(builder *prompt.Builder, tmpl *ent.PromptTemplate) {
+	if tmpl.SystemPrompt != "" {
+		builder.WithSystemPrompt(tmpl.SystemPrompt)
+	}
+	if tmpl.TaskPrompt != "" {
+		builder.WithTaskPrompt(tmpl.TaskPrompt)
+	}
+}
+
+// loadProjectPromptTemplate loads the PromptTemplate based on the project's scope setting.
 func (r *Runner) loadProjectPromptTemplate(ctx context.Context, proj *ent.Project, builder *prompt.Builder) {
+	scope := proj.PromptTemplateScope
+
+	switch scope {
+	case project.PromptTemplateScopeGlobalOnly:
+		if tmpl := r.loadGlobalDefaultTemplate(ctx); tmpl != nil {
+			applyTemplate(builder, tmpl)
+		}
+
+	case project.PromptTemplateScopeMerged:
+		globalTmpl := r.loadGlobalDefaultTemplate(ctx)
+		projectTmpl := r.loadProjectDefaultTemplate(ctx, proj)
+		var sysParts, taskParts []string
+		if globalTmpl != nil {
+			if globalTmpl.SystemPrompt != "" {
+				sysParts = append(sysParts, globalTmpl.SystemPrompt)
+			}
+			if globalTmpl.TaskPrompt != "" {
+				taskParts = append(taskParts, globalTmpl.TaskPrompt)
+			}
+		}
+		if projectTmpl != nil {
+			if projectTmpl.SystemPrompt != "" {
+				sysParts = append(sysParts, projectTmpl.SystemPrompt)
+			}
+			if projectTmpl.TaskPrompt != "" {
+				taskParts = append(taskParts, projectTmpl.TaskPrompt)
+			}
+		}
+		if len(sysParts) > 0 {
+			builder.WithSystemPrompt(strings.Join(sysParts, "\n\n"))
+		}
+		if len(taskParts) > 0 {
+			builder.WithTaskPrompt(strings.Join(taskParts, "\n\n"))
+		}
+
+	default: // project_only (default, backward compatible)
+		if tmpl := r.loadProjectDefaultTemplate(ctx, proj); tmpl != nil {
+			applyTemplate(builder, tmpl)
+		}
+	}
+}
+
+// loadGlobalDefaultTemplate loads the global default prompt template from settings.
+func (r *Runner) loadGlobalDefaultTemplate(ctx context.Context) *ent.PromptTemplate {
+	idStr := r.settingsMgr.GetWithDefault(ctx, settings.KeyDefaultPromptTemplateID, "")
+	if idStr == "" {
+		return nil
+	}
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		return nil
+	}
+	tmpl, err := r.client.PromptTemplate.Query().
+		Where(prompttemplate.ID(id)).
+		Only(ctx)
+	if err != nil {
+		return nil
+	}
+	return tmpl
+}
+
+// loadProjectDefaultTemplate loads the project's default prompt template, falling back to label rules.
+func (r *Runner) loadProjectDefaultTemplate(ctx context.Context, proj *ent.Project) *ent.PromptTemplate {
+	if proj.DefaultPromptTemplateID != nil {
+		tmpl, err := r.client.PromptTemplate.Query().
+			Where(prompttemplate.ID(*proj.DefaultPromptTemplateID)).
+			Only(ctx)
+		if err == nil && tmpl != nil {
+			return tmpl
+		}
+	}
+
 	rules, err := r.client.ProjectLabelRule.Query().
 		Where(projectlabelrule.HasProjectWith(project.ID(proj.ID))).
 		WithPromptTemplate().
 		All(ctx)
 	if err != nil || len(rules) == 0 {
-		return
+		return nil
 	}
 
-	// Use the first rule's prompt template that has one
 	for _, rule := range rules {
-		tmpl := rule.Edges.PromptTemplate
-		if tmpl != nil {
-			builder.WithProjectPrompts(tmpl.SystemPrompt, tmpl.TaskPrompt)
-			return
+		if tmpl := rule.Edges.PromptTemplate; tmpl != nil {
+			return tmpl
 		}
 	}
+	return nil
 }
 
-// resolveModelInfo returns the model name and version from the configured agent provider.
-func (r *Runner) resolveModelInfo(ctx context.Context) (string, string) {
-	provJSON := r.settingsMgr.GetWithDefault(ctx, settings.KeyAgentProviders, "")
-	if provJSON != "" {
-		var providers []map[string]string
-		if err := json.Unmarshal([]byte(provJSON), &providers); err == nil && len(providers) > 0 {
-			return providers[0]["name"], providers[0]["binary"]
+func (r *Runner) resolveAgent(ctx context.Context, t *ent.Task) (agentprovider.AgentAdapter, string, string, error) {
+	if r.agentRegistry == nil {
+		return nil, "", "", fmt.Errorf("agent registry not configured")
+	}
+
+	providers := r.loadConfiguredProviders(ctx)
+	if t.AgentProfileID != nil {
+		profile, err := r.client.AgentProfile.Get(ctx, *t.AgentProfileID)
+		if err != nil {
+			return nil, "", "", fmt.Errorf("loading task agent profile: %w", err)
+		}
+		providerName, binary := normalizeProvider(profile.Provider, providers)
+		adapter, err := r.agentRegistry.Create(providerName, agentprovider.AgentConfig{
+			Binary: binary,
+			Model:  profile.Model,
+			Extra: map[string]string{
+				"debug": r.settingsMgr.GetWithDefault(ctx, settings.KeyDebugMode, "false"),
+			},
+		})
+		if err != nil {
+			return nil, "", "", fmt.Errorf("creating agent adapter: %w", err)
+		}
+		return adapter, profile.Model, providerName, nil
+	}
+
+	if len(providers) > 0 {
+		providerName, binary := normalizeProvider(providers[0]["name"], providers)
+		adapter, err := r.agentRegistry.Create(providerName, agentprovider.AgentConfig{
+			Binary: binary,
+			Model:  providers[0]["model"],
+			Extra: map[string]string{
+				"debug": r.settingsMgr.GetWithDefault(ctx, settings.KeyDebugMode, "false"),
+			},
+		})
+		if err == nil {
+			return adapter, providerName, binary, nil
 		}
 	}
-	return "unknown", ""
+
+	adapter, err := r.agentRegistry.Create("mock", agentprovider.AgentConfig{
+		Extra: map[string]string{"debug": r.settingsMgr.GetWithDefault(ctx, settings.KeyDebugMode, "false")},
+	})
+	if err != nil {
+		return nil, "", "", err
+	}
+	return adapter, "mock", "", nil
+}
+
+func (r *Runner) loadConfiguredProviders(ctx context.Context) []map[string]string {
+	provJSON := r.settingsMgr.GetWithDefault(ctx, settings.KeyAgentProviders, "")
+	if provJSON == "" {
+		return nil
+	}
+	var providers []map[string]string
+	if err := json.Unmarshal([]byte(provJSON), &providers); err != nil {
+		return nil
+	}
+	return providers
+}
+
+func normalizeProvider(provider string, configured []map[string]string) (string, string) {
+	p := strings.TrimSpace(strings.ToLower(provider))
+	switch p {
+	case "cc":
+		p = "codex"
+	case "claude":
+		p = "claude-code"
+	}
+
+	for _, item := range configured {
+		name := strings.ToLower(strings.TrimSpace(item["name"]))
+		binary := item["binary"]
+		if name == p {
+			return item["name"], binary
+		}
+		if strings.ToLower(strings.TrimSpace(binary)) == p {
+			return item["name"], binary
+		}
+	}
+	return p, ""
 }
 
 // cloneWithCredentials clones using a temporary git credential helper.
@@ -429,15 +629,27 @@ func (r *Runner) cloneWithCredentials(ctx context.Context, repo model.RepoRef, d
 	return r.gitProvider.CloneRepo(ctx, repo, destPath, branch)
 }
 
-// cleanupCredentials removes any temporary credential files from the workspace.
+// cleanupCredentials removes any temporary credential files and strips inline
+// credentials from the remote URL so tokens are not left on disk.
 func (r *Runner) cleanupCredentials(repoPath string) {
 	credFile := filepath.Join(repoPath, ".git", "credentials")
 	os.Remove(credFile)
 
-	// Remove inline credentials from remote URL
-	cmd := exec.Command("git", "remote", "set-url", "origin", "https://github.com/redacted/redacted.git")
-	cmd.Dir = repoPath
-	_ = cmd.Run()
+	// Read current remote URL and strip embedded credentials
+	getCmd := exec.Command("git", "remote", "get-url", "origin")
+	getCmd.Dir = repoPath
+	out, err := getCmd.Output()
+	if err != nil {
+		return
+	}
+	remoteURL := strings.TrimSpace(string(out))
+	// Strip credentials from https://user:token@host/... → https://host/...
+	if u, err := url.Parse(remoteURL); err == nil && u.User != nil {
+		u.User = nil
+		setCmd := exec.Command("git", "remote", "set-url", "origin", u.String())
+		setCmd.Dir = repoPath
+		_ = setCmd.Run()
+	}
 }
 
 func (r *Runner) failTask(ctx context.Context, taskID int, err error) error {
@@ -453,6 +665,9 @@ func (r *Runner) failTask(ctx context.Context, taskID int, err error) error {
 	}
 	_, _ = update.Save(ctx)
 
+	if r.OnStatusChange != nil {
+		r.OnStatusChange(ctx, taskID, string(model.TaskStatusRunning), string(model.TaskStatusFailed))
+	}
 	r.broker.Publish(fmt.Sprintf("task:%d", taskID), sse.Event{
 		Type: "task.failed", Data: map[string]interface{}{
 			"task_id": taskID, "error": err.Error(), "retryable": retryable,
