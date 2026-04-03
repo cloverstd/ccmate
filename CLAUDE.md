@@ -73,6 +73,8 @@ React + TypeScript + Vite + Tailwind in `web/`. Built output embeds into Go bina
 
 Mobile adaptation is the top priority for frontend work. Design mobile-first before desktop enhancement. Prefer stacked layouts on narrow screens, wrapping tab and action rows, touch-friendly spacing, and avoid wide-table assumptions without a clear phone fallback.
 
+Prefer using `shadcn/ui` components first for frontend work. Avoid writing custom CSS unless the component library and existing utility classes cannot reasonably cover the requirement.
+
 ## Configuration
 
 YAML at project root (`config.yaml`), overridable by env vars with `CCMATE_` prefix (e.g., `CCMATE_SERVER_PORT=9090` → `server.port`). See `config.example.yaml` for all options. Config loaded by koanf in `internal/config/config.go`.
