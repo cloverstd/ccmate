@@ -9,24 +9,38 @@ permissions:
   contents: write
 
 jobs:
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Build frontend
+        run: cd web && bun install --frozen-lockfile && bun run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: internal/static/dist/
+
   build:
+    needs: build-frontend
     strategy:
       matrix:
         include:
           - goos: linux
             goarch: amd64
-            zig_target: x86_64-linux-gnu
+            runner: ubuntu-latest
           - goos: linux
             goarch: arm64
-            zig_target: aarch64-linux-gnu
+            runner: ubuntu-latest
+            cross: true
           - goos: darwin
             goarch: amd64
-            zig_target: x86_64-macos
+            runner: macos-13
           - goos: darwin
             goarch: arm64
-            zig_target: aarch64-macos
+            runner: macos-latest
 
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     env:
       CGO_ENABLED: 1
       GOOS: ${{ matrix.goos }}
@@ -39,15 +53,18 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: internal/static/dist/
 
-      - uses: goto-bus-stop/setup-zig@v2
-
-      - name: Build frontend
+      # Linux ARM64 cross-compile
+      - name: Install ARM64 toolchain
+        if: matrix.cross
         run: |
-          cd web
-          bun install --frozen-lockfile
-          bun run build
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc-aarch64-linux-gnu
+          echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
 
       - name: Build binary
         run: |
@@ -55,9 +72,6 @@ jobs:
           if [[ "$VERSION" != v* ]]; then
             VERSION="dev-$(echo $GITHUB_SHA | head -c 7)"
           fi
-
-          export CC="zig cc -target ${{ matrix.zig_target }}"
-          export CXX="zig c++ -target ${{ matrix.zig_target }}"
 
           BINARY_NAME="ccmate-${{ matrix.goos }}-${{ matrix.goarch }}"
           go build -trimpath \
