@@ -63,8 +63,19 @@ func (s *Scheduler) SetNotifyManager(nm *notify.Manager) {
 // transitionAndNotify wraps TransitionTask with notification dispatch.
 func (s *Scheduler) transitionAndNotify(ctx context.Context, taskID int, from, to model.TaskStatus) error {
 	err := TransitionTask(ctx, s.client, taskID, from, to)
-	if err == nil && s.notifyMgr != nil {
-		s.notifyMgr.OnStatusChange(ctx, taskID, string(from), string(to))
+	if err == nil {
+		if s.notifyMgr != nil {
+			s.notifyMgr.OnStatusChange(ctx, taskID, string(from), string(to))
+		}
+		if s.broker != nil {
+			payload := map[string]interface{}{
+				"task_id": taskID,
+				"from":    string(from),
+				"to":      string(to),
+			}
+			s.broker.Publish(fmt.Sprintf("task:%d", taskID), sse.Event{Type: "task.status", Data: payload})
+			s.broker.Publish("tasks", sse.Event{Type: "task.status", Data: payload})
+		}
 	}
 	return err
 }
@@ -225,10 +236,9 @@ func (s *Scheduler) checkTimeouts(ctx context.Context) {
 			SetPriority(99). // Mark as non-retryable (timeout)
 			Save(ctx)
 
-		s.broker.Publish(fmt.Sprintf("task:%d", t.ID), sse.Event{
-			Type: "task.failed",
-			Data: map[string]interface{}{"task_id": t.ID, "error": "task timed out", "retryable": false},
-		})
+		payload := map[string]interface{}{"task_id": t.ID, "error": "task timed out", "retryable": false}
+		s.broker.Publish(fmt.Sprintf("task:%d", t.ID), sse.Event{Type: "task.failed", Data: payload})
+		s.broker.Publish("tasks", sse.Event{Type: "task.failed", Data: payload})
 	}
 }
 

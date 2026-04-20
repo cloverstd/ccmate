@@ -29,7 +29,7 @@ export default function TaskDetailPage() {
 
   const { data: taskDetail, isLoading } = useQuery({
     queryKey: ['task', taskId], queryFn: () => tasksApi.get(taskId),
-    enabled: taskId > 0, refetchInterval: 5000,
+    enabled: taskId > 0,
   })
 
   const task = taskDetail?.task
@@ -71,10 +71,11 @@ export default function TaskDetailPage() {
   const cancelMutation = useMutation({ mutationFn: () => tasksApi.cancel(taskId), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId] }) })
 
   useEffect(() => {
-    if (!taskId || !task || !isActiveStatus(task.status)) return
+    if (!taskId) return
     const unsub = subscribeToTaskEvents(taskId, (event) => {
       const seq = Number((event.data as Record<string, unknown> | null)?.['_sequence'] ?? 0)
-      setLiveEvents((prev) => [...prev, { ...event, time: new Date().toLocaleTimeString(), sequence: seq }])
+      if (event.type !== 'connected' && event.type !== 'task.status')
+        setLiveEvents((prev) => [...prev, { ...event, time: new Date().toLocaleTimeString(), sequence: seq }])
       if (event.type === 'run.step' || event.type === 'tool.call' || event.type === 'message.delta') setThinking(true)
       if (event.type === 'run.status') {
         const s = (event.data as Record<string, unknown>)?.status
@@ -83,11 +84,11 @@ export default function TaskDetailPage() {
       }
       if (event.type === 'turn.completed') setThinking(false)
       if (event.type === 'task.failed' || event.type === 'task.completed') setThinking(false)
-      if (event.type === 'task.completed' || event.type === 'task.failed')
+      if (event.type === 'task.status' || event.type === 'task.completed' || event.type === 'task.failed' || event.type === 'message.created')
         queryClient.invalidateQueries({ queryKey: ['task', taskId] })
     })
     return unsub
-  }, [taskId, task?.status])
+  }, [taskId, queryClient])
 
   // Whenever the task leaves the running state, the agent isn't producing output — clear Thinking.
   useEffect(() => {

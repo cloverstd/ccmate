@@ -149,6 +149,11 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.broker.Publish("tasks", sse.Event{
+		Type: "task.created",
+		Data: map[string]interface{}{"task_id": t.ID, "project_id": proj.ID, "status": string(t.Status)},
+	})
+
 	writeJSON(w, http.StatusCreated, t)
 }
 
@@ -215,6 +220,11 @@ func (h *TaskHandler) CreateFromPrompt(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"failed to create task"}`, http.StatusInternalServerError)
 		return
 	}
+
+	h.broker.Publish("tasks", sse.Event{
+		Type: "task.created",
+		Data: map[string]interface{}{"task_id": t.ID, "project_id": proj.ID, "status": string(t.Status)},
+	})
 
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
 		"issue": issue,
@@ -605,4 +615,10 @@ func (h *TaskHandler) EventStream(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	topic := fmt.Sprintf("task:%s", id)
 	h.broker.ServeHTTP(w, r, topic)
+}
+
+// TasksEventStream streams cross-task lifecycle events (creation, status changes, failures).
+// Used by UI views that need to react to any task updating — e.g. sidebar running count.
+func (h *TaskHandler) TasksEventStream(w http.ResponseWriter, r *http.Request) {
+	h.broker.ServeHTTP(w, r, "tasks")
 }

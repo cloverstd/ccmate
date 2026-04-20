@@ -122,6 +122,7 @@ func NewRouter(
 			r.Post("/tasks/{id}/complete", taskHandler.Complete)
 			r.Post("/tasks/{id}/messages", taskHandler.SendMessage)
 			r.Post("/tasks/{id}/attachments", taskHandler.UploadAttachment)
+			r.Get("/tasks/events/stream", taskHandler.TasksEventStream)
 			r.Get("/tasks/{id}/events/stream", taskHandler.EventStream)
 
 			// Notifications
