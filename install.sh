@@ -8,6 +8,12 @@
 
 set -euo pipefail
 
+# Script-scoped tmpdir so the EXIT trap can reference it safely after the
+# install function returns (set -u would otherwise trip on a local variable).
+TMPDIR_CCMATE=""
+cleanup_tmp() { [[ -n "$TMPDIR_CCMATE" ]] && rm -rf "$TMPDIR_CCMATE"; }
+trap cleanup_tmp EXIT
+
 REPO="cloverstd/ccmate"
 INSTALL_DIR="/usr/local/bin"
 VERSION=""
@@ -105,24 +111,23 @@ resolve_version() {
 
 install_binary() {
   local platform="$1" version="$2"
-  local url tmpdir
+  local url
 
   url="https://github.com/${REPO}/releases/download/${version}/ccmate-${platform}.tar.gz"
-  tmpdir="$(mktemp -d)"
-  trap 'rm -rf "$tmpdir"' EXIT
+  TMPDIR_CCMATE="$(mktemp -d)"
 
   echo "Downloading ${url}..."
-  if ! curl -fsSL "$url" -o "${tmpdir}/ccmate.tar.gz"; then
+  if ! curl -fsSL "$url" -o "${TMPDIR_CCMATE}/ccmate.tar.gz"; then
     echo "Error: Failed to download. Check version '${version}' for platform '${platform}'." >&2
     exit 1
   fi
 
-  tar xzf "${tmpdir}/ccmate.tar.gz" -C "$tmpdir"
+  tar xzf "${TMPDIR_CCMATE}/ccmate.tar.gz" -C "$TMPDIR_CCMATE"
 
   if [[ -w "$INSTALL_DIR" ]]; then
-    mv "${tmpdir}/ccmate-${platform}" "${INSTALL_DIR}/${BINARY_NAME}"
+    mv "${TMPDIR_CCMATE}/ccmate-${platform}" "${INSTALL_DIR}/${BINARY_NAME}"
   else
-    sudo mv "${tmpdir}/ccmate-${platform}" "${INSTALL_DIR}/${BINARY_NAME}"
+    sudo mv "${TMPDIR_CCMATE}/ccmate-${platform}" "${INSTALL_DIR}/${BINARY_NAME}"
   fi
   chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
 
