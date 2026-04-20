@@ -12,7 +12,7 @@ var (
 	AgentProfilesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "provider", Type: field.TypeString},
-		{Name: "model", Type: field.TypeString},
+		{Name: "model", Type: field.TypeString, Nullable: true, Default: ""},
 		{Name: "supports_image", Type: field.TypeBool, Default: false},
 		{Name: "supports_resume", Type: field.TypeBool, Default: false},
 		{Name: "config_json", Type: field.TypeString, Size: 2147483647, Default: "{}"},

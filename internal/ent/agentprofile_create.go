@@ -32,6 +32,14 @@ func (_c *AgentProfileCreate) SetModel(v string) *AgentProfileCreate {
 	return _c
 }
 
+// SetNillableModel sets the "model" field if the given value is not nil.
+func (_c *AgentProfileCreate) SetNillableModel(v *string) *AgentProfileCreate {
+	if v != nil {
+		_c.SetModel(*v)
+	}
+	return _c
+}
+
 // SetSupportsImage sets the "supports_image" field.
 func (_c *AgentProfileCreate) SetSupportsImage(v bool) *AgentProfileCreate {
 	_c.mutation.SetSupportsImage(v)
@@ -137,6 +145,10 @@ func (_c *AgentProfileCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *AgentProfileCreate) defaults() {
+	if _, ok := _c.mutation.Model(); !ok {
+		v := agentprofile.DefaultModel
+		_c.mutation.SetModel(v)
+	}
 	if _, ok := _c.mutation.SupportsImage(); !ok {
 		v := agentprofile.DefaultSupportsImage
 		_c.mutation.SetSupportsImage(v)
@@ -167,14 +179,6 @@ func (_c *AgentProfileCreate) check() error {
 	if v, ok := _c.mutation.Provider(); ok {
 		if err := agentprofile.ProviderValidator(v); err != nil {
 			return &ValidationError{Name: "provider", err: fmt.Errorf(`ent: validator failed for field "AgentProfile.provider": %w`, err)}
-		}
-	}
-	if _, ok := _c.mutation.Model(); !ok {
-		return &ValidationError{Name: "model", err: errors.New(`ent: missing required field "AgentProfile.model"`)}
-	}
-	if v, ok := _c.mutation.Model(); ok {
-		if err := agentprofile.ModelValidator(v); err != nil {
-			return &ValidationError{Name: "model", err: fmt.Errorf(`ent: validator failed for field "AgentProfile.model": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.SupportsImage(); !ok {

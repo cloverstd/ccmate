@@ -237,9 +237,22 @@ func (m *AgentProfileMutation) OldModel(ctx context.Context) (v string, err erro
 	return oldValue.Model, nil
 }
 
+// ClearModel clears the value of the "model" field.
+func (m *AgentProfileMutation) ClearModel() {
+	m.model = nil
+	m.clearedFields[agentprofile.FieldModel] = struct{}{}
+}
+
+// ModelCleared returns if the "model" field was cleared in this mutation.
+func (m *AgentProfileMutation) ModelCleared() bool {
+	_, ok := m.clearedFields[agentprofile.FieldModel]
+	return ok
+}
+
 // ResetModel resets all changes to the "model" field.
 func (m *AgentProfileMutation) ResetModel() {
 	m.model = nil
+	delete(m.clearedFields, agentprofile.FieldModel)
 }
 
 // SetSupportsImage sets the "supports_image" field.
@@ -610,7 +623,11 @@ func (m *AgentProfileMutation) AddField(name string, value ent.Value) error {
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *AgentProfileMutation) ClearedFields() []string {
-	return nil
+	var fields []string
+	if m.FieldCleared(agentprofile.FieldModel) {
+		fields = append(fields, agentprofile.FieldModel)
+	}
+	return fields
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -623,6 +640,11 @@ func (m *AgentProfileMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *AgentProfileMutation) ClearField(name string) error {
+	switch name {
+	case agentprofile.FieldModel:
+		m.ClearModel()
+		return nil
+	}
 	return fmt.Errorf("unknown AgentProfile nullable field %s", name)
 }
 

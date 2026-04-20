@@ -56,8 +56,8 @@ func ValidColumn(column string) bool {
 var (
 	// ProviderValidator is a validator for the "provider" field. It is called by the builders before save.
 	ProviderValidator func(string) error
-	// ModelValidator is a validator for the "model" field. It is called by the builders before save.
-	ModelValidator func(string) error
+	// DefaultModel holds the default value on creation for the "model" field.
+	DefaultModel string
 	// DefaultSupportsImage holds the default value on creation for the "supports_image" field.
 	DefaultSupportsImage bool
 	// DefaultSupportsResume holds the default value on creation for the "supports_resume" field.

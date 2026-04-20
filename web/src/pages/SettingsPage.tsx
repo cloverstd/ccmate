@@ -247,7 +247,7 @@ export default function SettingsPage() {
                 ) : (
                   <div><Label>Provider</Label><Input value={modelForm.provider} onChange={(e) => setModelForm({ ...modelForm, provider: e.target.value })} placeholder="claude-code" /></div>
                 )}
-                <div><Label>Model</Label><Input value={modelForm.model} onChange={(e) => setModelForm({ ...modelForm, model: e.target.value })} placeholder="claude-sonnet-4-20250514" /></div>
+                <div><Label>Model <span className="text-gray-400 font-normal">(optional)</span></Label><Input value={modelForm.model} onChange={(e) => setModelForm({ ...modelForm, model: e.target.value })} placeholder="leave empty to use agent default" /></div>
               </div>
               <div><Label>Config JSON</Label><textarea value={modelForm.config_json} onChange={(e) => setModelForm({ ...modelForm, config_json: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm font-mono bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" /></div>
               <div className="flex gap-4">
@@ -255,7 +255,7 @@ export default function SettingsPage() {
                 <Checkbox label="Resume" checked={modelForm.supports_resume} onChange={(v) => setModelForm({ ...modelForm, supports_resume: v })} />
               </div>
               <div className="flex gap-2">
-                <Btn onClick={() => editingModelID ? updateModel.mutate() : createModel.mutate()} disabled={!modelForm.provider || !modelForm.model}>
+                <Btn onClick={() => editingModelID ? updateModel.mutate() : createModel.mutate()} disabled={!modelForm.provider}>
                   {editingModelID ? 'Save' : 'Create'}
                 </Btn>
               </div>
@@ -266,7 +266,7 @@ export default function SettingsPage() {
             <Label>Default Agent</Label>
             <Select value={form.default_agent_profile_id || ''} onChange={(e) => { updateField('default_agent_profile_id', e.target.value); saveSetting.mutate({ default_agent_profile_id: e.target.value }) }} className="w-full max-w-md">
               <option value="">None</option>
-              {(models || []).map((m: AgentProfile) => <option key={m.id} value={String(m.id)}>{m.provider} / {m.model}</option>)}
+              {(models || []).map((m: AgentProfile) => <option key={m.id} value={String(m.id)}>{m.provider} / {m.model || 'default'}</option>)}
             </Select>
             <p className="text-xs text-gray-400 mt-1">Fallback when task/project has no agent.</p>
           </div>
@@ -277,14 +277,14 @@ export default function SettingsPage() {
                 <div key={m.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
                   <div className="flex items-center gap-3">
                     <span className="inline-flex items-center rounded-md bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700 border border-purple-200">{m.provider}</span>
-                    <span className="text-sm font-mono text-gray-700">{m.model}</span>
+                    <span className="text-sm font-mono text-gray-700">{m.model || <span className="text-gray-400 italic">default</span>}</span>
                     {m.supports_image && <span className="text-xs text-gray-400">img</span>}
                     {m.supports_resume && <span className="text-xs text-gray-400">resume</span>}
                   </div>
                   <div className="flex items-center gap-2">
                     <Btn variant="ghost" size="sm" onClick={() => {
                       setEditingModelID(m.id); setShowModelForm(true)
-                      setModelForm({ provider: m.provider, model: m.model, supports_image: m.supports_image, supports_resume: m.supports_resume, config_json: m.config_json || '{}' })
+                      setModelForm({ provider: m.provider, model: m.model || '', supports_image: m.supports_image, supports_resume: m.supports_resume, config_json: m.config_json || '{}' })
                     }}>Edit</Btn>
                     <Btn variant="ghost" size="sm" onClick={() => deleteModel.mutate(m.id)} className="text-red-500 hover:text-red-700 hover:bg-red-50">Delete</Btn>
                   </div>

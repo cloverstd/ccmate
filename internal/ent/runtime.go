@@ -34,8 +34,8 @@ func init() {
 	agentprofile.ProviderValidator = agentprofileDescProvider.Validators[0].(func(string) error)
 	// agentprofileDescModel is the schema descriptor for model field.
 	agentprofileDescModel := agentprofileFields[1].Descriptor()
-	// agentprofile.ModelValidator is a validator for the "model" field. It is called by the builders before save.
-	agentprofile.ModelValidator = agentprofileDescModel.Validators[0].(func(string) error)
+	// agentprofile.DefaultModel holds the default value on creation for the model field.
+	agentprofile.DefaultModel = agentprofileDescModel.Default.(string)
 	// agentprofileDescSupportsImage is the schema descriptor for supports_image field.
 	agentprofileDescSupportsImage := agentprofileFields[2].Descriptor()
 	// agentprofile.DefaultSupportsImage holds the default value on creation for the supports_image field.

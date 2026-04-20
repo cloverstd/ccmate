@@ -56,6 +56,12 @@ func (_u *AgentProfileUpdate) SetNillableModel(v *string) *AgentProfileUpdate {
 	return _u
 }
 
+// ClearModel clears the value of the "model" field.
+func (_u *AgentProfileUpdate) ClearModel() *AgentProfileUpdate {
+	_u.mutation.ClearModel()
+	return _u
+}
+
 // SetSupportsImage sets the "supports_image" field.
 func (_u *AgentProfileUpdate) SetSupportsImage(v bool) *AgentProfileUpdate {
 	_u.mutation.SetSupportsImage(v)
@@ -152,11 +158,6 @@ func (_u *AgentProfileUpdate) check() error {
 			return &ValidationError{Name: "provider", err: fmt.Errorf(`ent: validator failed for field "AgentProfile.provider": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.Model(); ok {
-		if err := agentprofile.ModelValidator(v); err != nil {
-			return &ValidationError{Name: "model", err: fmt.Errorf(`ent: validator failed for field "AgentProfile.model": %w`, err)}
-		}
-	}
 	return nil
 }
 
@@ -177,6 +178,9 @@ func (_u *AgentProfileUpdate) sqlSave(ctx context.Context) (_node int, err error
 	}
 	if value, ok := _u.mutation.Model(); ok {
 		_spec.SetField(agentprofile.FieldModel, field.TypeString, value)
+	}
+	if _u.mutation.ModelCleared() {
+		_spec.ClearField(agentprofile.FieldModel, field.TypeString)
 	}
 	if value, ok := _u.mutation.SupportsImage(); ok {
 		_spec.SetField(agentprofile.FieldSupportsImage, field.TypeBool, value)
@@ -235,6 +239,12 @@ func (_u *AgentProfileUpdateOne) SetNillableModel(v *string) *AgentProfileUpdate
 	if v != nil {
 		_u.SetModel(*v)
 	}
+	return _u
+}
+
+// ClearModel clears the value of the "model" field.
+func (_u *AgentProfileUpdateOne) ClearModel() *AgentProfileUpdateOne {
+	_u.mutation.ClearModel()
 	return _u
 }
 
@@ -347,11 +357,6 @@ func (_u *AgentProfileUpdateOne) check() error {
 			return &ValidationError{Name: "provider", err: fmt.Errorf(`ent: validator failed for field "AgentProfile.provider": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.Model(); ok {
-		if err := agentprofile.ModelValidator(v); err != nil {
-			return &ValidationError{Name: "model", err: fmt.Errorf(`ent: validator failed for field "AgentProfile.model": %w`, err)}
-		}
-	}
 	return nil
 }
 
@@ -389,6 +394,9 @@ func (_u *AgentProfileUpdateOne) sqlSave(ctx context.Context) (_node *AgentProfi
 	}
 	if value, ok := _u.mutation.Model(); ok {
 		_spec.SetField(agentprofile.FieldModel, field.TypeString, value)
+	}
+	if _u.mutation.ModelCleared() {
+		_spec.ClearField(agentprofile.FieldModel, field.TypeString)
 	}
 	if value, ok := _u.mutation.SupportsImage(); ok {
 		_spec.SetField(agentprofile.FieldSupportsImage, field.TypeBool, value)

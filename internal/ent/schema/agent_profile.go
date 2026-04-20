@@ -15,7 +15,7 @@ type AgentProfile struct {
 func (AgentProfile) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("provider").NotEmpty(),
-		field.String("model").NotEmpty(),
+		field.String("model").Optional().Default(""),
 		field.Bool("supports_image").Default(false),
 		field.Bool("supports_resume").Default(false),
 		field.Text("config_json").Default("{}"),

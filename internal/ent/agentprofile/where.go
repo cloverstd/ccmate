@@ -209,6 +209,16 @@ func ModelHasSuffix(v string) predicate.AgentProfile {
 	return predicate.AgentProfile(sql.FieldHasSuffix(FieldModel, v))
 }
 
+// ModelIsNil applies the IsNil predicate on the "model" field.
+func ModelIsNil() predicate.AgentProfile {
+	return predicate.AgentProfile(sql.FieldIsNull(FieldModel))
+}
+
+// ModelNotNil applies the NotNil predicate on the "model" field.
+func ModelNotNil() predicate.AgentProfile {
+	return predicate.AgentProfile(sql.FieldNotNull(FieldModel))
+}
+
 // ModelEqualFold applies the EqualFold predicate on the "model" field.
 func ModelEqualFold(v string) predicate.AgentProfile {
 	return predicate.AgentProfile(sql.FieldEqualFold(FieldModel, v))

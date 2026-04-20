@@ -89,7 +89,7 @@ export default function ProjectListPage() {
                   <Label>Default Agent</Label>
                   <Select value={defaultAgentProfileID} onChange={(e) => setDefaultAgentProfileID(e.target.value)} className="w-full max-w-md">
                     <option value="">Use global default</option>
-                    {(models || []).map((m: AgentProfile) => <option key={m.id} value={String(m.id)}>{m.provider} / {m.model}</option>)}
+                    {(models || []).map((m: AgentProfile) => <option key={m.id} value={String(m.id)}>{m.provider} / {m.model || 'default'}</option>)}
                   </Select>
                   <p className="text-xs text-gray-400 mt-1">
                     {defaultAgentProfileID ? 'Tasks will use this agent.' : `Tasks will use the global default${settings?.default_agent_profile_id ? '' : ' if configured'}.`}

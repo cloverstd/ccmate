@@ -110,7 +110,7 @@ export interface Task {
   current_session_id: number | null; created_at: string; updated_at: string
   edges: { project?: Project; sessions?: Session[]; prompt_snapshot?: PromptSnapshot | null }
 }
-export interface Session { id: number; status: string; started_at: string | null; ended_at: string | null; edges: { messages?: SessionMessage[]; events?: SessionEvent[] } }
+export interface Session { id: number; provider_session_key: string; status: string; started_at: string | null; ended_at: string | null; created_at: string; edges: { messages?: SessionMessage[]; events?: SessionEvent[] } }
 export interface SessionMessage { id: number; role: string; content_type: string; content: string; sequence: number; created_at: string }
 export interface SessionEvent { id: number; event_type: string; payload_json: string; sequence: number; created_at: string }
 

@@ -158,7 +158,7 @@ export default function ProjectDetailPage() {
                 <Label>Default Agent</Label>
                 <Select value={projectForm.default_agent_profile_id} onChange={(e) => setProjectForm({ ...projectForm, default_agent_profile_id: e.target.value })} className="w-full">
                   <option value="">Use global default</option>
-                  {(models || []).map((m: AgentProfile) => <option key={m.id} value={String(m.id)}>{m.provider} / {m.model}</option>)}
+                  {(models || []).map((m: AgentProfile) => <option key={m.id} value={String(m.id)}>{m.provider} / {m.model || 'default'}</option>)}
                 </Select>
               </div>
               <div>
@@ -261,7 +261,7 @@ export default function ProjectDetailPage() {
                   <Label>Agent</Label>
                   <Select value={taskAgentProfileID} onChange={(e) => setTaskAgentProfileID(e.target.value)} className="w-full max-w-md">
                     <option value="">Use default</option>
-                    {(models || []).map((m: AgentProfile) => <option key={m.id} value={String(m.id)}>{m.provider} / {m.model}</option>)}
+                    {(models || []).map((m: AgentProfile) => <option key={m.id} value={String(m.id)}>{m.provider} / {m.model || 'default'}</option>)}
                   </Select>
                 </div>
                 <Input value={promptTitle} onChange={(e) => setPromptTitle(e.target.value)} placeholder="Issue title" />
@@ -289,7 +289,7 @@ export default function ProjectDetailPage() {
               <div className="flex items-center gap-2">
                 <Select value={taskAgentProfileID} onChange={(e) => setTaskAgentProfileID(e.target.value)} className="text-xs">
                   <option value="">Default agent</option>
-                  {(models || []).map((m: AgentProfile) => <option key={m.id} value={String(m.id)}>{m.provider}/{m.model}</option>)}
+                  {(models || []).map((m: AgentProfile) => <option key={m.id} value={String(m.id)}>{m.provider}/{m.model || 'default'}</option>)}
                 </Select>
                 <Btn variant="ghost" size="sm" onClick={() => { refetchIssues(); refetchPRs() }}>Refresh</Btn>
               </div>
