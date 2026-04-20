@@ -200,7 +200,7 @@ User=${svc_user}
 Group=${svc_group}
 ExecStart=${INSTALL_DIR}/${BINARY_NAME} -config ${CONFIG_DIR}/config.yaml
 WorkingDirectory=${DATA_DIR}
-Restart=on-failure
+Restart=always
 RestartSec=5
 LimitNOFILE=65536
 

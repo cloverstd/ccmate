@@ -10,12 +10,12 @@ import (
 )
 
 type SetupHandler struct {
-	mgr     *settings.Manager
-	gitProv gitprovider.GitProvider
+	mgr        *settings.Manager
+	gitProvMgr *gitprovider.Manager
 }
 
-func NewSetupHandler(mgr *settings.Manager, gitProv gitprovider.GitProvider) *SetupHandler {
-	return &SetupHandler{mgr: mgr, gitProv: gitProv}
+func NewSetupHandler(mgr *settings.Manager, gitProvMgr *gitprovider.Manager) *SetupHandler {
+	return &SetupHandler{mgr: mgr, gitProvMgr: gitProvMgr}
 }
 
 func (h *SetupHandler) Status(w http.ResponseWriter, r *http.Request) {
@@ -42,6 +42,9 @@ func (h *SetupHandler) Setup(w http.ResponseWriter, r *http.Request) {
 	if err := h.mgr.ApplySetup(r.Context(), body.Setup); err != nil {
 		http.Error(w, `{"error":"setup failed"}`, http.StatusInternalServerError)
 		return
+	}
+	if h.gitProvMgr != nil {
+		h.gitProvMgr.Rebuild(r.Context(), h.mgr)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "initialized"})
 }
@@ -74,6 +77,11 @@ func (h *SetupHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 
 	// Clear cache to reflect changes
 	h.mgr.ClearCache()
+
+	// Rebuild provider holders so settings changes take effect without restart.
+	if h.gitProvMgr != nil {
+		h.gitProvMgr.Rebuild(ctx, h.mgr)
+	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }

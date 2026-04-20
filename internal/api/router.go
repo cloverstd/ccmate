@@ -28,9 +28,10 @@ func NewRouter(
 	broker *sse.Broker,
 	sched *scheduler.Scheduler,
 	passkeySvc *auth.PasskeyService,
-	gitProv gitprovider.GitProvider,
+	gitProvMgr *gitprovider.Manager,
 	settingsMgr *settings.Manager,
 	notifyMgr *notify.Manager,
+	version string,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -41,13 +42,12 @@ func NewRouter(
 	r.Use(middleware.CORS)
 
 	authHandler := handler.NewAuthHandler(client, cfg, passkeySvc, settingsMgr)
-	projectHandler := handler.NewProjectHandler(client, gitProv, settingsMgr)
-	taskHandler := handler.NewTaskHandler(client, cfg, broker, sched, gitProv, settingsMgr)
+	projectHandler := handler.NewProjectHandler(client, gitProvMgr, settingsMgr)
+	taskHandler := handler.NewTaskHandler(client, cfg, broker, sched, gitProvMgr, settingsMgr)
 	webhookHandler := handler.NewWebhookHandler(client, cfg, sched, settingsMgr)
-	setupHandler := handler.NewSetupHandler(settingsMgr, gitProv)
-	if gitProv != nil {
-		webhookHandler.SetGitProvider(gitProv)
-	}
+	setupHandler := handler.NewSetupHandler(settingsMgr, gitProvMgr)
+	updateHandler := handler.NewUpdateHandler(version)
+	webhookHandler.SetGitProviderManager(gitProvMgr)
 
 	// Webhook
 	r.Post("/webhooks/github", webhookHandler.HandleGitHub)
@@ -139,6 +139,11 @@ func NewRouter(
 				w.Header().Set("Content-Type", "application/json")
 				w.Write([]byte(`{"status":"ok"}`))
 			})
+
+			// Online update
+			r.Get("/update/info", updateHandler.Info)
+			r.Get("/update/releases", updateHandler.Releases)
+			r.Post("/update/apply", updateHandler.Apply)
 
 			// Models
 			r.Get("/models", projectHandler.ListModels)

@@ -28,6 +28,7 @@ import (
 	"github.com/cloverstd/ccmate/internal/scheduler"
 	"github.com/cloverstd/ccmate/internal/settings"
 	"github.com/cloverstd/ccmate/internal/sse"
+	"github.com/cloverstd/ccmate/internal/updater"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -102,22 +103,13 @@ func main() {
 		return
 	}
 
-	// Initialize Git Provider (from DB settings)
+	// Initialize Git Provider (from DB settings). The Manager holds the active
+	// provider and can be rebuilt at runtime whenever settings change, so
+	// rotating a PAT or webhook secret no longer requires a service restart.
 	gpRegistry := gitprovider.NewRegistry()
 	gpRegistry.Register(&ghprovider.Factory{})
-
-	var gitProv gitprovider.GitProvider
-	personalToken := settingsMgr.GetWithDefault(ctx, settings.KeyGitHubPersonalToken, "")
-	webhookSecret := settingsMgr.GetWithDefault(ctx, settings.KeyGitHubWebhookSecret, "")
-	if personalToken != "" || settingsMgr.GetWithDefault(ctx, settings.KeyGitHubAppID, "") != "" {
-		gitProv, err = gpRegistry.Create("github", gitprovider.ProviderConfig{
-			WebhookSecret: webhookSecret,
-			PersonalToken: personalToken,
-		})
-		if err != nil {
-			slog.Warn("failed to create github provider", "error", err)
-		}
-	}
+	gitProvMgr := gitprovider.NewManager(gpRegistry)
+	gitProvMgr.Rebuild(ctx, settingsMgr)
 
 	// Initialize Agent Provider
 	apRegistry := agentprovider.NewRegistry()
@@ -143,11 +135,11 @@ func main() {
 	// SSE + Scheduler
 	broker := sse.NewBroker()
 	sched := scheduler.New(client, settingsMgr, broker)
-	sched.SetProviders(gitProv, apRegistry)
+	sched.SetProviders(gitProvMgr, apRegistry)
 	sched.SetNotifyManager(notifyMgr)
 
 	// HTTP router
-	router := api.NewRouter(client, cfg, broker, sched, passkeySvc, gitProv, settingsMgr, notifyMgr)
+	router := api.NewRouter(client, cfg, broker, sched, passkeySvc, gitProvMgr, settingsMgr, notifyMgr, version)
 
 	srv := &http.Server{
 		Addr: cfg.Server.Addr(), Handler: router,
@@ -157,7 +149,7 @@ func main() {
 	schedCtx, schedCancel := context.WithCancel(ctx)
 	go sched.Run(schedCtx)
 	go scheduler.RunCleanup(schedCtx, client, settingsMgr)
-	go scheduler.RunIssueScanner(schedCtx, client, settingsMgr, gitProv)
+	go scheduler.RunIssueScanner(schedCtx, client, settingsMgr, gitProvMgr)
 
 	go func() {
 		slog.Info("starting server", "addr", cfg.Server.Addr())
@@ -205,4 +197,11 @@ func main() {
 		slog.Error("server shutdown error", "error", err)
 	}
 	slog.Info("server stopped")
+
+	// If an online update replaced the binary, exit non-zero so systemd's
+	// Restart= policy (on-failure or always) relaunches with the new build.
+	if updater.RestartPending() {
+		slog.Info("online update pending, exiting non-zero to trigger systemd restart")
+		os.Exit(1)
+	}
 }

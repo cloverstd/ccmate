@@ -31,8 +31,16 @@ type TaskHandler struct {
 	cfg         *config.Config
 	broker      *sse.Broker
 	sched       *scheduler.Scheduler
-	gitProv     gitprovider.GitProvider
+	gitProvMgr  *gitprovider.Manager
 	settingsMgr *settings.Manager
+}
+
+// gitProv returns the currently active git provider (may be nil).
+func (h *TaskHandler) gitProv() gitprovider.GitProvider {
+	if h.gitProvMgr == nil {
+		return nil
+	}
+	return h.gitProvMgr.Current()
 }
 
 type taskGitSummary struct {
@@ -41,8 +49,8 @@ type taskGitSummary struct {
 	Branches     []model.RepoBranch `json:"branches,omitempty"`
 }
 
-func NewTaskHandler(client *ent.Client, cfg *config.Config, broker *sse.Broker, sched *scheduler.Scheduler, gitProv gitprovider.GitProvider, settingsMgr *settings.Manager) *TaskHandler {
-	return &TaskHandler{client: client, cfg: cfg, broker: broker, sched: sched, gitProv: gitProv, settingsMgr: settingsMgr}
+func NewTaskHandler(client *ent.Client, cfg *config.Config, broker *sse.Broker, sched *scheduler.Scheduler, gitProvMgr *gitprovider.Manager, settingsMgr *settings.Manager) *TaskHandler {
+	return &TaskHandler{client: client, cfg: cfg, broker: broker, sched: sched, gitProvMgr: gitProvMgr, settingsMgr: settingsMgr}
 }
 
 func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -165,7 +173,8 @@ func (h *TaskHandler) CreateFromPrompt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.gitProv == nil {
+	gp := h.gitProv()
+	if gp == nil {
 		http.Error(w, `{"error":"git provider not configured"}`, http.StatusInternalServerError)
 		return
 	}
@@ -179,7 +188,7 @@ func (h *TaskHandler) CreateFromPrompt(w http.ResponseWriter, r *http.Request) {
 	repo := parseRepoURLFromString(proj.RepoURL)
 
 	// Create issue on GitHub
-	issue, err := h.gitProv.CreateIssue(r.Context(), repo, req.Title, req.Body, req.Labels)
+	issue, err := gp.CreateIssue(r.Context(), repo, req.Title, req.Body, req.Labels)
 	if err != nil {
 		http.Error(w, fmt.Sprintf(`{"error":"failed to create issue: %s"}`, err.Error()), http.StatusInternalServerError)
 		return
@@ -279,10 +288,11 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if t.Edges.Project != nil {
 		workspacePath = filepath.Join(basePath, "workspaces", fmt.Sprintf("%d", t.Edges.Project.ID), fmt.Sprintf("%d", t.ID), "repo")
 		repo := parseRepoURLFromString(t.Edges.Project.RepoURL)
-		if h.gitProv != nil && repo.Owner != "" {
-			issue, _ = h.gitProv.GetIssue(r.Context(), repo, t.IssueNumber)
+		gp := h.gitProv()
+		if gp != nil && repo.Owner != "" {
+			issue, _ = gp.GetIssue(r.Context(), repo, t.IssueNumber)
 			if t.PrNumber != nil && *t.PrNumber > 0 {
-				pr, _ = h.gitProv.GetPullRequest(r.Context(), repo, *t.PrNumber)
+				pr, _ = gp.GetPullRequest(r.Context(), repo, *t.PrNumber)
 				// Fallback: build minimal PR info from task data if API fails
 				if pr == nil {
 					pr = &model.PullRequest{
@@ -296,7 +306,7 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 				// Try to find PR by branch name
 				ws := runner.NewWorkspace(filepath.Join(basePath, "workspaces"), t.Edges.Project.ID, t.ID)
 				branchName := ws.BranchName(t.IssueNumber)
-				pr, _ = h.gitProv.FindPullRequestByHead(r.Context(), repo, branchName)
+				pr, _ = gp.FindPullRequestByHead(r.Context(), repo, branchName)
 			}
 		} else if t.PrNumber != nil && *t.PrNumber > 0 && t.Edges.Project != nil {
 			// No git provider but we have pr_number — build link from repo URL
@@ -411,7 +421,8 @@ func (h *TaskHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	proj := t.Edges.Project
-	if proj == nil || h.gitProv == nil {
+	gp := h.gitProv()
+	if proj == nil || gp == nil {
 		http.Error(w, `{"error":"project or git provider not available"}`, http.StatusBadRequest)
 		return
 	}
@@ -426,7 +437,7 @@ func (h *TaskHandler) Complete(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"error":"task has no PR to merge"}`, http.StatusBadRequest)
 			return
 		}
-		if err := h.gitProv.MergePullRequest(ctx, repo, *t.PrNumber); err != nil {
+		if err := gp.MergePullRequest(ctx, repo, *t.PrNumber); err != nil {
 			http.Error(w, fmt.Sprintf(`{"error":"failed to merge PR #%d: %s"}`, *t.PrNumber, err.Error()), http.StatusInternalServerError)
 			return
 		}
@@ -435,7 +446,7 @@ func (h *TaskHandler) Complete(w http.ResponseWriter, r *http.Request) {
 
 	// 2. Close issue if requested or implied by merge.
 	if req.CloseIssue || req.MergePR {
-		if err := h.gitProv.CloseIssue(ctx, repo, t.IssueNumber); err != nil {
+		if err := gp.CloseIssue(ctx, repo, t.IssueNumber); err != nil {
 			http.Error(w, fmt.Sprintf(`{"error":"failed to close issue #%d: %s"}`, t.IssueNumber, err.Error()), http.StatusInternalServerError)
 			return
 		}
