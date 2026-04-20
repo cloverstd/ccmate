@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
-import { projectsApi, githubApi, modelsApi, settingsApi, type Project, type GitHubRepo, type AgentProfile } from '../lib/api'
+import { projectsApi, githubApi, modelsApi, settingsApi, promptsApi, type Project, type GitHubRepo, type AgentProfile } from '../lib/api'
 import { Card, CardHeader, CardContent, CardFooter, Label, Input, Select, Checkbox, Btn, Tag } from '../components/ui'
 
 export default function ProjectListPage() {
@@ -12,15 +12,22 @@ export default function ProjectListPage() {
   const [repoDropdownOpen, setRepoDropdownOpen] = useState(false)
   const [autoMode, setAutoMode] = useState(false)
   const [defaultAgentProfileID, setDefaultAgentProfileID] = useState('')
+  const [promptTemplateScope, setPromptTemplateScope] = useState<'global_only' | 'project_only' | 'merged'>('project_only')
+  const [defaultPromptTemplateID, setDefaultPromptTemplateID] = useState('')
 
   const { data: projects, isLoading } = useQuery({ queryKey: ['projects'], queryFn: projectsApi.list })
   const { data: repos, isLoading: reposLoading } = useQuery({ queryKey: ['github-repos'], queryFn: githubApi.listRepos, enabled: showForm })
   const { data: models } = useQuery({ queryKey: ['models'], queryFn: modelsApi.list, enabled: showForm })
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: settingsApi.get, enabled: showForm })
+  const { data: globalTemplates } = useQuery({ queryKey: ['prompt-templates', 'global'], queryFn: () => promptsApi.list({ scope: 'global' }), enabled: showForm })
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<Project>) => projectsApi.create(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['projects'] }); setShowForm(false); setSelectedRepo(null); setDefaultAgentProfileID('') },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      setShowForm(false); setSelectedRepo(null); setDefaultAgentProfileID('')
+      setPromptTemplateScope('project_only'); setDefaultPromptTemplateID('')
+    },
   })
 
   const handleCreate = () => {
@@ -29,6 +36,8 @@ export default function ProjectListPage() {
       name: selectedRepo.full_name, repo_url: selectedRepo.html_url, git_provider: 'github',
       default_branch: selectedRepo.default_branch, auto_mode: autoMode,
       default_agent_profile_id: defaultAgentProfileID ? parseInt(defaultAgentProfileID, 10) : undefined,
+      prompt_template_scope: promptTemplateScope,
+      default_prompt_template_id: defaultPromptTemplateID ? parseInt(defaultPromptTemplateID, 10) : null,
     })
   }
 
@@ -95,6 +104,27 @@ export default function ProjectListPage() {
                     {defaultAgentProfileID ? 'Tasks will use this agent.' : `Tasks will use the global default${settings?.default_agent_profile_id ? '' : ' if configured'}.`}
                   </p>
                 </div>
+                <div>
+                  <Label>Template Scope</Label>
+                  <Select value={promptTemplateScope} onChange={(e) => setPromptTemplateScope(e.target.value as 'global_only' | 'project_only' | 'merged')} className="w-full max-w-md">
+                    <option value="project_only">Project Only</option>
+                    <option value="global_only">Global Only</option>
+                    <option value="merged">Merged</option>
+                  </Select>
+                  <p className="text-xs text-gray-400 mt-1">Controls which prompt templates apply to tasks in this project.</p>
+                </div>
+                {promptTemplateScope !== 'global_only' && (
+                  <div>
+                    <Label>Project Template</Label>
+                    <Select value={defaultPromptTemplateID} onChange={(e) => setDefaultPromptTemplateID(e.target.value)} className="w-full max-w-md">
+                      <option value="">Platform default</option>
+                      {(globalTemplates || []).map((t) => (
+                        <option key={t.id} value={String(t.id)}>{t.name} (global)</option>
+                      ))}
+                    </Select>
+                    <p className="text-xs text-gray-400 mt-1">Pick a global template now, or add project-specific templates after creation.</p>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
