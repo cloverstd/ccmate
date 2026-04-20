@@ -16,7 +16,7 @@ type WebhookHandler struct {
 	client      *ent.Client
 	cfg         *config.Config
 	sched       *scheduler.Scheduler
-	gitProvider gitprovider.GitProvider
+	gitProvMgr  *gitprovider.Manager
 	settingsMgr *settings.Manager
 }
 
@@ -24,25 +24,29 @@ func NewWebhookHandler(client *ent.Client, cfg *config.Config, sched *scheduler.
 	return &WebhookHandler{client: client, cfg: cfg, sched: sched, settingsMgr: settingsMgr}
 }
 
-func (h *WebhookHandler) SetGitProvider(provider gitprovider.GitProvider) {
-	h.gitProvider = provider
+func (h *WebhookHandler) SetGitProviderManager(mgr *gitprovider.Manager) {
+	h.gitProvMgr = mgr
 }
 
 func (h *WebhookHandler) HandleGitHub(w http.ResponseWriter, r *http.Request) {
-	if h.gitProvider == nil {
+	var gitProv gitprovider.GitProvider
+	if h.gitProvMgr != nil {
+		gitProv = h.gitProvMgr.Current()
+	}
+	if gitProv == nil {
 		slog.Error("git provider not configured")
 		http.Error(w, `{"error":"git provider not configured"}`, http.StatusInternalServerError)
 		return
 	}
 
-	event, err := h.gitProvider.VerifyWebhook(r)
+	event, err := gitProv.VerifyWebhook(r)
 	if err != nil {
 		slog.Warn("webhook verification failed", "error", err)
 		http.Error(w, `{"error":"webhook verification failed"}`, http.StatusUnauthorized)
 		return
 	}
 
-	processor := webhook.NewProcessor(h.client, h.gitProvider, h.settingsMgr)
+	processor := webhook.NewProcessor(h.client, gitProv, h.settingsMgr)
 	if err := processor.ProcessEvent(r.Context(), event); err != nil {
 		slog.Error("failed to process webhook event", "error", err)
 		http.Error(w, `{"error":"processing failed"}`, http.StatusInternalServerError)

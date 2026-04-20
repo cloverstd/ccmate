@@ -25,7 +25,7 @@ type Scheduler struct {
 	client        *ent.Client
 	settingsMgr   *settings.Manager
 	broker        *sse.Broker
-	gitProvider   gitprovider.GitProvider
+	gitProvider   *gitprovider.Manager
 	agentRegistry *agentprovider.Registry
 	notifyMgr     *notify.Manager
 
@@ -50,7 +50,7 @@ func New(client *ent.Client, settingsMgr *settings.Manager, broker *sse.Broker) 
 }
 
 // SetProviders configures the git and agent providers for task execution.
-func (s *Scheduler) SetProviders(gp gitprovider.GitProvider, ar *agentprovider.Registry) {
+func (s *Scheduler) SetProviders(gp *gitprovider.Manager, ar *agentprovider.Registry) {
 	s.gitProvider = gp
 	s.agentRegistry = ar
 }
@@ -166,8 +166,16 @@ func (s *Scheduler) startTask(parentCtx context.Context, taskID int) {
 				Save(parentCtx)
 			return
 		}
+		currentProv := s.gitProvider.Current()
+		if currentProv == nil {
+			slog.Error("git provider not configured, cannot run task", "task_id", taskID)
+			_, _ = s.client.Task.UpdateOneID(taskID).
+				SetStatus(enttask.StatusFailed).
+				Save(parentCtx)
+			return
+		}
 
-		r := runner.New(s.client, s.settingsMgr, s.broker, s.gitProvider, s.agentRegistry)
+		r := runner.New(s.client, s.settingsMgr, s.broker, currentProv, s.agentRegistry)
 		r.OnHandleReady = func(adapter agentprovider.AgentAdapter, h *agentprovider.SessionHandle) {
 			s.mu.Lock()
 			s.runningHandles[taskID] = runningAgent{adapter: adapter, handle: h}
