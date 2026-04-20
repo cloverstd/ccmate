@@ -1,7 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useEffect } from 'react'
-import { settingsApi, modelsApi, authApi, promptsApi, type AgentProfile, type PromptTemplate } from '../lib/api'
+import { useState, useEffect, useMemo } from 'react'
+import { settingsApi, modelsApi, authApi, promptsApi, updateApi, type AgentProfile, type PromptTemplate, type Release } from '../lib/api'
 import PromptEditor from '../components/PromptEditor'
+import Markdown from '../components/Markdown'
 import { Card, CardHeader, CardContent, CardFooter, Label, Input, Select, Checkbox, Btn, Tag, Alert, Separator } from '../components/ui'
 import { useToast } from '../components/Toast'
 
@@ -125,6 +126,9 @@ export default function SettingsPage() {
   return (
     <div className="max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">Settings</h1>
+
+      {/* ====== Online Update ====== */}
+      <UpdateCard />
 
       {/* ====== GitHub OAuth ====== */}
       <Card>
@@ -512,6 +516,141 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+function UpdateCard() {
+  const { toast } = useToast()
+  const { data: info, refetch: refetchInfo, isFetching: infoFetching } = useQuery({
+    queryKey: ['update-info'], queryFn: updateApi.info, staleTime: 60_000,
+  })
+  const { data: releases, isFetching: releasesFetching } = useQuery({
+    queryKey: ['update-releases'], queryFn: updateApi.releases, staleTime: 60_000,
+  })
+  const [selectedTag, setSelectedTag] = useState<string>('')
+  const [installing, setInstalling] = useState(false)
+
+  const selected = useMemo<Release | undefined>(() => {
+    if (!releases) return undefined
+    if (selectedTag) return releases.find((r) => r.tag_name === selectedTag)
+    return releases.find((r) => !r.prerelease) || releases[0]
+  }, [releases, selectedTag])
+
+  const apply = async () => {
+    if (!selected) return
+    if (!window.confirm(`Install ${selected.tag_name}? The service will restart after the binary is replaced.`)) return
+    setInstalling(true)
+    try {
+      await updateApi.apply(selected.tag_name)
+      toast(`Installed ${selected.tag_name}. The service is restarting…`, 'success')
+      // Poll until the server comes back, then refresh info.
+      setTimeout(() => { refetchInfo() }, 8000)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Update failed'
+      toast('Update failed: ' + msg, 'error')
+    } finally {
+      setInstalling(false)
+    }
+  }
+
+  const canApply = info?.supported && selected && selected.tag_name !== info.current_version
+
+  return (
+    <Card>
+      <CardHeader
+        title="Online Update"
+        description="Upgrade ccmate to a newer release from GitHub"
+        action={
+          <Btn variant="ghost" size="sm" onClick={() => refetchInfo()} disabled={infoFetching}>
+            {infoFetching ? 'Checking…' : 'Check for updates'}
+          </Btn>
+        }
+      />
+      <CardContent>
+        {info?.update_available && (
+          <Alert variant="warning">
+            A new version <strong>{info.latest_version}</strong> is available. Current: <code className="px-1 rounded bg-yellow-100 text-[11px]">{info.current_version}</code>.
+            {info.release_url && (
+              <> <a href={info.release_url} target="_blank" rel="noopener noreferrer" className="underline ml-1">View on GitHub &rarr;</a></>
+            )}
+          </Alert>
+        )}
+        {info && !info.supported && (
+          <Alert variant="warning">
+            Online update is not supported on this platform (<code>{info.platform}</code>). Use <code>install.sh</code> manually.
+          </Alert>
+        )}
+        {info?.error && (
+          <Alert variant="warning">Failed to query GitHub releases: {info.error}</Alert>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <Label>Current Version</Label>
+            <div className="text-sm font-mono py-2 px-3 rounded-lg bg-gray-50 border border-gray-200">{info?.current_version || '…'}</div>
+          </div>
+          <div>
+            <Label>Platform</Label>
+            <div className="text-sm font-mono py-2 px-3 rounded-lg bg-gray-50 border border-gray-200">{info?.platform || '…'}</div>
+          </div>
+          <div>
+            <Label>Latest Release</Label>
+            <div className="text-sm font-mono py-2 px-3 rounded-lg bg-gray-50 border border-gray-200">{info?.latest_version || '—'}</div>
+          </div>
+        </div>
+
+        <Separator />
+
+        <div>
+          <Label>Select Version</Label>
+          {releasesFetching && !releases ? (
+            <p className="text-sm text-gray-400">Loading releases…</p>
+          ) : releases && releases.length > 0 ? (
+            <Select value={selected?.tag_name || ''} onChange={(e) => setSelectedTag(e.target.value)} className="w-full max-w-md">
+              {releases.map((r) => (
+                <option key={r.tag_name} value={r.tag_name}>
+                  {r.tag_name}{r.prerelease ? ' (pre-release)' : ''}{info?.current_version === r.tag_name ? ' — installed' : ''}
+                </option>
+              ))}
+            </Select>
+          ) : (
+            <p className="text-sm text-gray-400">No releases found.</p>
+          )}
+        </div>
+
+        {selected && (
+          <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-4">
+            <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-sm">{selected.name || selected.tag_name}</span>
+                {selected.prerelease && <Tag color="yellow">pre-release</Tag>}
+                {info?.current_version === selected.tag_name && <Tag color="green">installed</Tag>}
+              </div>
+              <span className="text-xs text-gray-400">
+                {selected.published_at ? new Date(selected.published_at).toLocaleString() : ''}
+              </span>
+            </div>
+            {selected.body ? (
+              <div className="max-h-80 overflow-auto text-sm">
+                <Markdown>{selected.body}</Markdown>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 italic">No release notes.</p>
+            )}
+          </div>
+        )}
+      </CardContent>
+      <CardFooter>
+        <Btn onClick={apply} disabled={!canApply || installing}>
+          {installing ? 'Installing…' : selected ? `Install ${selected.tag_name}` : 'Install'}
+        </Btn>
+        {selected?.html_url && (
+          <a href={selected.html_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline ml-2 self-center">
+            Release page &rarr;
+          </a>
+        )}
+      </CardFooter>
+    </Card>
   )
 }
 

@@ -138,7 +138,7 @@ func main() {
 	sched.SetNotifyManager(notifyMgr)
 
 	// HTTP router
-	router := api.NewRouter(client, cfg, broker, sched, passkeySvc, gitProvMgr, settingsMgr, notifyMgr)
+	router := api.NewRouter(client, cfg, broker, sched, passkeySvc, gitProvMgr, settingsMgr, notifyMgr, version)
 
 	srv := &http.Server{
 		Addr: cfg.Server.Addr(), Handler: router,
