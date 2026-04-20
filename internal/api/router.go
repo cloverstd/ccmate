@@ -31,6 +31,7 @@ func NewRouter(
 	gitProvMgr *gitprovider.Manager,
 	settingsMgr *settings.Manager,
 	notifyMgr *notify.Manager,
+	version string,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -45,6 +46,7 @@ func NewRouter(
 	taskHandler := handler.NewTaskHandler(client, cfg, broker, sched, gitProvMgr, settingsMgr)
 	webhookHandler := handler.NewWebhookHandler(client, cfg, sched, settingsMgr)
 	setupHandler := handler.NewSetupHandler(settingsMgr, gitProvMgr)
+	updateHandler := handler.NewUpdateHandler(version)
 	webhookHandler.SetGitProviderManager(gitProvMgr)
 
 	// Webhook
@@ -137,6 +139,11 @@ func NewRouter(
 				w.Header().Set("Content-Type", "application/json")
 				w.Write([]byte(`{"status":"ok"}`))
 			})
+
+			// Online update
+			r.Get("/update/info", updateHandler.Info)
+			r.Get("/update/releases", updateHandler.Releases)
+			r.Post("/update/apply", updateHandler.Apply)
 
 			// Models
 			r.Get("/models", projectHandler.ListModels)

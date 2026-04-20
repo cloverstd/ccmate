@@ -94,6 +94,37 @@ export const promptsApi = {
   delete: (id: number) => request<void>(`/prompt-templates/${id}`, { method: 'DELETE' }),
 }
 
+export interface UpdateInfo {
+  current_version: string
+  latest_version?: string
+  update_available: boolean
+  platform: string
+  asset_name: string
+  supported: boolean
+  release_url?: string
+  error?: string
+}
+
+export interface ReleaseAsset { name: string; browser_download_url: string; size: number }
+export interface Release {
+  tag_name: string
+  name: string
+  body: string
+  prerelease: boolean
+  draft: boolean
+  published_at: string
+  html_url: string
+  assets: ReleaseAsset[] | null
+}
+
+export const updateApi = {
+  info: () => request<UpdateInfo>('/update/info'),
+  releases: () => request<Release[]>('/update/releases'),
+  apply: (tag: string) => request<{ status: string; restart_seconds: number; tag: string }>(
+    '/update/apply', { method: 'POST', body: JSON.stringify({ tag }) },
+  ),
+}
+
 export const modelsApi = {
   list: () => request<AgentProfile[]>('/models'),
   create: (data: Partial<AgentProfile>) => request<AgentProfile>('/models', { method: 'POST', body: JSON.stringify(data) }),
