@@ -538,7 +538,7 @@ function UpdateCard() {
 
   const apply = async () => {
     if (!selected) return
-    if (!window.confirm(`Install ${selected.tag_name}? The service will restart after the binary is replaced.`)) return
+    if (!window.confirm(`Install ${selected.tag_name}? The binary will be replaced and systemd will restart ccmate.`)) return
     setInstalling(true)
     try {
       await updateApi.apply(selected.tag_name)

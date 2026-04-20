@@ -33,9 +33,9 @@ func (h *UpdateHandler) Releases(w http.ResponseWriter, r *http.Request) {
 }
 
 // Apply downloads the chosen release and replaces the running binary, then
-// schedules a restart so the supervisor (systemd/docker) starts the new
-// binary. Requires a service manager to relaunch — the response signals
-// that to the UI.
+// schedules a SIGTERM so the process exits and systemd relaunches it with
+// the new binary. Requires the ccmate systemd unit (Restart=always or
+// Restart=on-failure) — the response signals restart timing to the UI.
 func (h *UpdateHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Tag string `json:"tag"`

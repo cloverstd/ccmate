@@ -28,6 +28,7 @@ import (
 	"github.com/cloverstd/ccmate/internal/scheduler"
 	"github.com/cloverstd/ccmate/internal/settings"
 	"github.com/cloverstd/ccmate/internal/sse"
+	"github.com/cloverstd/ccmate/internal/updater"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -196,4 +197,11 @@ func main() {
 		slog.Error("server shutdown error", "error", err)
 	}
 	slog.Info("server stopped")
+
+	// If an online update replaced the binary, exit non-zero so systemd's
+	// Restart= policy (on-failure or always) relaunches with the new build.
+	if updater.RestartPending() {
+		slog.Info("online update pending, exiting non-zero to trigger systemd restart")
+		os.Exit(1)
+	}
 }

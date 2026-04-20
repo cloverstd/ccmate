@@ -22,9 +22,20 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
+
+// restartPending is set after a successful Apply() so that the main loop
+// can exit with a non-zero code, which makes systemd relaunch the service
+// under both Restart=on-failure and Restart=always.
+var restartPending atomic.Bool
+
+// RestartPending reports whether an online update completed and the
+// process should exit non-zero on shutdown so systemd picks up the new
+// binary.
+func RestartPending() bool { return restartPending.Load() }
 
 const (
 	defaultRepo = "cloverstd/ccmate"
@@ -267,22 +278,20 @@ func (u *Updater) Apply(ctx context.Context, tag string) error {
 	if err := os.Rename(tmpPath, exe); err != nil {
 		return fmt.Errorf("replace binary: %w", err)
 	}
+	restartPending.Store(true)
 	return nil
 }
 
-// ScheduleRestart arranges for the process to exit shortly so that the
-// service supervisor restarts it with the newly-installed binary. It runs
-// in a goroutine so the HTTP response can flush first.
+// ScheduleRestart sends SIGTERM to ourselves after `delay` so the HTTP
+// response can flush, main() can drain running agents, and then the
+// process exits with a non-zero code (see RestartPending) — that triggers
+// systemd to relaunch with the newly-installed binary.
 func ScheduleRestart(delay time.Duration) {
 	go func() {
 		time.Sleep(delay)
-		// Try a graceful SIGTERM to ourselves first; main() installs handlers
-		// that drain running agents.
 		if p, err := os.FindProcess(os.Getpid()); err == nil {
 			_ = p.Signal(syscall.SIGTERM)
 		}
-		time.Sleep(20 * time.Second)
-		os.Exit(0)
 	}()
 }
 
