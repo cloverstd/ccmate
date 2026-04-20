@@ -123,12 +123,23 @@ jobs:
           Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --prerelease
 
-      # Stable release for version tags
+      # Stable release for version tags. Idempotent: if a (possibly empty) release
+      # already exists for this tag — e.g. GitHub auto-created one from the tag, or
+      # a previous run was partially successful — upload assets into it instead of
+      # failing on "already exists".
       - name: Release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ github.ref_name }}" release/* \
-            --title "${{ github.ref_name }}" \
-            --generate-notes
+          TAG="${{ github.ref_name }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists, uploading assets..."
+            gh release upload "$TAG" release/* --clobber
+            # Ensure title is set (auto-created releases often have empty titles)
+            gh release edit "$TAG" --title "$TAG" --draft=false --prerelease=false
+          else
+            gh release create "$TAG" release/* \
+              --title "$TAG" \
+              --generate-notes
+          fi
