@@ -138,16 +138,19 @@ export default function TaskDetailPage() {
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Header — collapsible */}
-      <div className="shrink-0">
-        <div className="flex flex-wrap items-center gap-2 mb-2">
-          <button onClick={() => setHeaderCollapsed(!headerCollapsed)} className="text-gray-400 hover:text-gray-600 shrink-0">
-            <svg className={`w-4 h-4 transition-transform ${headerCollapsed ? '' : 'rotate-90'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+      <div className="task-head shrink-0">
+        <div className="task-head-row1">
+          <button onClick={() => setHeaderCollapsed(!headerCollapsed)} className="btn btn-icon btn-ghost" title="Toggle details">
+            <svg className={`transition-transform ${headerCollapsed ? '' : 'rotate-90'}`} width={12} height={12} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
           </button>
-          <h1 className="text-lg sm:text-xl font-bold truncate">Task #{task.id}</h1>
+          <div className="task-head-title">
+            <span className="hash">#{task.id}</span>
+            <span className="sep-t">›</span>
+            <span className="issue">issue #{task.issue_number}</span>
+          </div>
           <StatusBadge status={task.status} />
-          <span className="text-xs text-gray-500 hidden sm:inline">Issue #{task.issue_number} &middot; {task.type} &middot; <Link to={`/projects/${task.edges.project?.id}`} className="text-blue-600 hover:underline">{task.edges.project?.name}</Link></span>
-          <div className="flex items-center gap-1.5 ml-auto shrink-0">
+          <span className="mono text-dim hidden sm:inline" style={{ fontSize: 11 }}>{task.type} · <Link to={`/projects/${task.edges.project?.id}`} className="lnk">{task.edges.project?.name}</Link></span>
+          <div className="task-head-actions ml-auto">
             {task.status === 'running' && <Btn variant="secondary" size="sm" onClick={() => pauseMutation.mutate()} disabled={pauseMutation.isPending}>{pauseMutation.isPending ? '...' : 'Pause'}</Btn>}
             {task.status === 'paused' && <Btn variant="secondary" size="sm" onClick={() => resumeMutation.mutate()} disabled={resumeMutation.isPending}>{resumeMutation.isPending ? '...' : 'Resume'}</Btn>}
             {task.status === 'failed' && <Btn variant="secondary" size="sm" onClick={() => retryMutation.mutate()} disabled={retryMutation.isPending}>{retryMutation.isPending ? '...' : 'Retry'}</Btn>}
@@ -542,22 +545,25 @@ function MessagesTab({
       {showScrollBtn && <ScrollToBottomBtn onClick={scrollToBottom} />}
 
       {taskActive && (
-        <div className="shrink-0 border-t border-gray-200 p-4">
-          <div className="flex gap-2 items-end">
-            <textarea value={messageInput} onChange={(e) => setMessageInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); canSend && messageInput.trim() && sendMutation.mutate(messageInput) } }}
-              placeholder={thinking ? 'Waiting for agent...' : 'Send a message... (Shift+Enter for newline)'}
-              disabled={thinking} rows={1}
-              onFocus={(e) => { e.currentTarget.rows = 4 }}
-              onBlur={(e) => { if (!e.currentTarget.value) e.currentTarget.rows = 1 }}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none transition-all focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400" />
-            <div className="flex gap-1.5 shrink-0">
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+        <div className="composer">
+          <div className="composer-box">
+            <div className="composer-prompt">
+              <span className="prompt">❯</span>
+              <textarea value={messageInput} onChange={(e) => setMessageInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); canSend && messageInput.trim() && sendMutation.mutate(messageInput) } }}
+                placeholder={thinking ? 'Agent is working — waiting...' : 'Send a message or /command...'}
+                disabled={thinking} rows={1} />
+            </div>
+            <div className="composer-bar">
+              <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }}
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadMutation.mutate(f); e.target.value = '' }} />
-              <Btn variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={thinking} className="!px-2">📎</Btn>
-              <Btn onClick={() => messageInput.trim() && sendMutation.mutate(messageInput)}
+              <button className="btn btn-icon btn-ghost" onClick={() => fileInputRef.current?.click()} disabled={thinking} title="Attach image">
+                <svg width={13} height={13} fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 20 20"><path d="M14 8l-5 5a2 2 0 0 1-3-3l6-6a3 3 0 0 1 4 4l-7 7a4 4 0 0 1-6-6l5-5"/></svg>
+              </button>
+              <span className="hint"><kbd className="kbd">⏎</kbd> send · <kbd className="kbd">⇧⏎</kbd> newline</span>
+              <Btn variant="accent" size="sm" onClick={() => messageInput.trim() && sendMutation.mutate(messageInput)}
                 disabled={!canSend || !messageInput.trim()}>
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19V5m0 0l-7 7m7-7l7 7" /></svg>
+                Send
               </Btn>
             </div>
           </div>
@@ -735,11 +741,9 @@ function PromptBubble({ label, content }: { label: string; content: string }) {
 function UserBubble({ msg }: { msg: SessionMessage }) {
   const time = new Date(msg.created_at).toLocaleTimeString()
   return (
-    <div className="flex justify-end">
-      <div className="max-w-full sm:max-w-[80%] px-4 py-2 rounded-lg text-sm bg-blue-600 text-white">
-        <pre className="whitespace-pre-wrap font-sans">{msg.content}</pre>
-        <div className="text-xs mt-1 text-blue-200">{time}</div>
-      </div>
+    <div className="bubble user">
+      <div className="bubble-meta"><span className="role">you</span><span>· {time}</span></div>
+      <div className="bubble-box">{msg.content}</div>
     </div>
   )
 }
@@ -747,26 +751,10 @@ function UserBubble({ msg }: { msg: SessionMessage }) {
 function MessageBubble({ msg }: { msg: SessionMessage }) {
   const time = new Date(msg.created_at).toLocaleTimeString()
   const isResult = msg.content_type === 'result'
-
-  if (isResult) {
-    return (
-      <div className="flex justify-start">
-        <div className="max-w-full sm:max-w-[90%] rounded-lg text-sm border-l-4 border-blue-500 bg-gradient-to-r from-blue-50 to-white shadow-sm">
-          <div className="px-4 py-3">
-            <Markdown className="text-gray-900 text-sm leading-relaxed">{msg.content}</Markdown>
-            <div className="text-xs text-gray-400 mt-2">{time}</div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="flex justify-start">
-      <div className="max-w-full sm:max-w-[80%] px-4 py-2 rounded-lg text-sm bg-gray-100 text-gray-800">
-        <Markdown>{msg.content}</Markdown>
-        <div className="text-xs mt-1 text-gray-400">{time}</div>
-      </div>
+    <div className={`bubble assistant${isResult ? ' result' : ''}`}>
+      <div className="bubble-meta"><span className="role">assistant</span><span>· {time}</span></div>
+      <div className="bubble-box"><Markdown>{msg.content}</Markdown></div>
     </div>
   )
 }
@@ -776,25 +764,11 @@ function LiveMessageBubble({ event }: { event: LiveEvent }) {
   const content = data.content as string
   if (!content) return null
 
-  if (event.type === 'message.completed') {
-    return (
-      <div className="flex justify-start">
-        <div className="max-w-full sm:max-w-[90%] rounded-lg text-sm border-l-4 border-blue-500 bg-gradient-to-r from-blue-50 to-white shadow-sm">
-          <div className="px-4 py-3">
-            <Markdown className="text-gray-900 text-sm leading-relaxed">{content}</Markdown>
-            <div className="text-xs text-gray-400 mt-2">{event.time}</div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
+  const isFinal = event.type === 'message.completed'
   return (
-    <div className="flex justify-start">
-      <div className="max-w-full sm:max-w-[80%] px-4 py-2 rounded-lg text-sm bg-gray-100 text-gray-800">
-        <Markdown>{content}</Markdown>
-        <div className="text-xs mt-1 text-gray-400">{event.time}</div>
-      </div>
+    <div className={`bubble assistant${isFinal ? ' result' : ''}`}>
+      <div className="bubble-meta"><span className="role">assistant</span><span>· {event.time}</span></div>
+      <div className="bubble-box"><Markdown>{content}</Markdown></div>
     </div>
   )
 }
@@ -826,17 +800,9 @@ function ScrollToBottomBtn({ onClick }: { onClick: () => void }) {
 
 function ThinkingIndicator() {
   return (
-    <div className="flex justify-start">
-      <div className="px-4 py-3 rounded-lg bg-gray-50 border border-gray-200">
-        <div className="flex items-center gap-2">
-          <div className="flex gap-1">
-            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-          </div>
-          <span className="text-xs text-gray-500">Thinking...</span>
-        </div>
-      </div>
+    <div className="thinking">
+      <span className="d"/><span className="d"/><span className="d"/>
+      <span>thinking...</span>
     </div>
   )
 }

@@ -23,8 +23,8 @@ function App() {
 
   if (initialized === null || isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-gray-500">Loading...</div>
+      <div className="login-bg">
+        <div className="mono text-dim">$ booting ccmate<span className="brand-caret" style={{ marginLeft: 4 }}/></div>
       </div>
     )
   }

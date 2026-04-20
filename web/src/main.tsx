@@ -6,6 +6,19 @@ import App from './App'
 import { ToastProvider } from './components/Toast'
 import './index.css'
 
+// Apply persisted UI prefs (theme/font/density) ASAP to avoid flash.
+try {
+  const prefs = JSON.parse(localStorage.getItem('ccmate.prefs') || '{}')
+  const r = document.documentElement
+  r.dataset.theme = prefs.theme || 'light'
+  r.dataset.font = prefs.font || 'mono'
+  r.dataset.density = prefs.density || 'normal'
+} catch {
+  document.documentElement.dataset.theme = 'light'
+  document.documentElement.dataset.font = 'mono'
+  document.documentElement.dataset.density = 'normal'
+}
+
 // iOS Safari ignores viewport user-scalable=no since iOS 10
 // Must use JS to prevent pinch-to-zoom
 document.addEventListener('gesturestart', (e) => e.preventDefault())

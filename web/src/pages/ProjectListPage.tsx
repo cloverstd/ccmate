@@ -42,10 +42,14 @@ export default function ProjectListPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Projects</h1>
-        <Btn onClick={() => setShowForm(!showForm)}>{showForm ? 'Cancel' : 'New Project'}</Btn>
+    <div>
+      <div className="page-head">
+        <div>
+          <h1 className="page-title"><span className="prompt">$</span> projects</h1>
+          <div className="page-sub">ls -la · {projects?.length ?? 0} repos</div>
+        </div>
+        <div className="spacer"/>
+        <Btn variant="primary" onClick={() => setShowForm(!showForm)}>{showForm ? 'Cancel' : '+ New'}</Btn>
       </div>
 
       {showForm && (
@@ -139,28 +143,34 @@ export default function ProjectListPage() {
       )}
 
       {isLoading ? (
-        <p className="text-gray-400 text-sm text-center py-8">Loading...</p>
+        <div className="empty">Loading...</div>
       ) : !projects || projects.length === 0 ? (
-        <Card>
-          <CardContent className="!py-12">
-            <p className="text-gray-400 text-center text-sm">No projects yet. Add one to get started.</p>
-          </CardContent>
-        </Card>
+        <div className="empty">
+          <div>No projects yet. Add one to get started.</div>
+        </div>
       ) : (
-        <div className="space-y-3">
-          {projects.map((project) => (
-            <Link key={project.id} to={`/projects/${project.id}`}
-              className="block rounded-xl border border-gray-200 bg-white shadow-sm hover:border-gray-300 hover:shadow transition-all p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="text-sm font-semibold text-gray-900 truncate">{project.name}</span>
-                  <Tag color={project.auto_mode ? 'green' : 'gray'}>{project.auto_mode ? 'Auto' : 'Manual'}</Tag>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
+          {projects.map((project) => {
+            const shortName = project.name.split('/')[1] ?? project.name
+            return (
+              <Link key={project.id} to={`/projects/${project.id}`} className="term" style={{ cursor: 'pointer', textDecoration: 'none', display: 'block' }}>
+                <div className="term-head">
+                  <div className="dots"><span className="dot-tc"/><span className="dot-tc"/><span className="dot-tc"/></div>
+                  <span className="title">~/{shortName}</span>
                 </div>
-                <span className="text-xs text-gray-400 shrink-0 ml-4 font-mono">{project.default_branch}</span>
-              </div>
-              <p className="text-xs text-gray-500 mt-1 truncate">{project.repo_url}</p>
-            </Link>
-          ))}
+                <div className="term-body" style={{ padding: 14 }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{project.name}</div>
+                  <div className="row-flex wrap" style={{ gap: 4, marginBottom: 10 }}>
+                    <span className="chip ghost">{project.default_branch}</span>
+                    {project.auto_mode && <span className="chip accent">auto</span>}
+                  </div>
+                  <div className="row-flex" style={{ justifyContent: 'space-between', color: 'var(--fg-dim)', fontSize: 11, fontFamily: 'var(--font-mono)' }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{project.repo_url.replace(/^https?:\/\//, '')}</span>
+                  </div>
+                </div>
+              </Link>
+            )
+          })}
         </div>
       )}
     </div>
