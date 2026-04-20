@@ -21,12 +21,20 @@ import (
 
 type ProjectHandler struct {
 	client      *ent.Client
-	gitProv     gitprovider.GitProvider
+	gitProvMgr  *gitprovider.Manager
 	settingsMgr *settings.Manager
 }
 
-func NewProjectHandler(client *ent.Client, gitProv gitprovider.GitProvider, settingsMgr *settings.Manager) *ProjectHandler {
-	return &ProjectHandler{client: client, gitProv: gitProv, settingsMgr: settingsMgr}
+func NewProjectHandler(client *ent.Client, gitProvMgr *gitprovider.Manager, settingsMgr *settings.Manager) *ProjectHandler {
+	return &ProjectHandler{client: client, gitProvMgr: gitProvMgr, settingsMgr: settingsMgr}
+}
+
+// gitProv returns the currently active git provider (may be nil).
+func (h *ProjectHandler) gitProv() gitprovider.GitProvider {
+	if h.gitProvMgr == nil {
+		return nil
+	}
+	return h.gitProvMgr.Current()
 }
 
 type CreateProjectRequest struct {
@@ -190,12 +198,12 @@ func (h *ProjectHandler) GetRepoInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	branches, err := h.gitProv.ListRepoBranches(ctx, *repo)
+	branches, err := h.gitProv().ListRepoBranches(ctx, *repo)
 	if err != nil {
 		http.Error(w, `{"error":"failed to list remote branches: `+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
-	tags, err := h.gitProv.ListRepoTags(ctx, *repo)
+	tags, err := h.gitProv().ListRepoTags(ctx, *repo)
 	if err != nil {
 		http.Error(w, `{"error":"failed to list remote tags: `+err.Error()+`"}`, http.StatusInternalServerError)
 		return
@@ -247,7 +255,7 @@ func (h *ProjectHandler) ListRepoIssues(w http.ResponseWriter, r *http.Request) 
 
 	ctx := r.Context()
 	// Use gitProvider to list open issues
-	issues, err := h.gitProv.ListRepoIssues(ctx, *repo)
+	issues, err := h.gitProv().ListRepoIssues(ctx, *repo)
 	if err != nil {
 		http.Error(w, `{"error":"failed to list issues: `+err.Error()+`"}`, http.StatusInternalServerError)
 		return
@@ -261,7 +269,7 @@ func (h *ProjectHandler) ListRepoPRs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prs, err := h.gitProv.ListRepoPRs(r.Context(), *repo)
+	prs, err := h.gitProv().ListRepoPRs(r.Context(), *repo)
 	if err != nil {
 		http.Error(w, `{"error":"failed to list PRs: `+err.Error()+`"}`, http.StatusInternalServerError)
 		return
@@ -270,7 +278,7 @@ func (h *ProjectHandler) ListRepoPRs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProjectHandler) getRepoRef(w http.ResponseWriter, r *http.Request) *model.RepoRef {
-	if h.gitProv == nil {
+	if h.gitProv() == nil {
 		http.Error(w, `{"error":"git provider not configured"}`, http.StatusInternalServerError)
 		return nil
 	}
@@ -287,11 +295,12 @@ func (h *ProjectHandler) getRepoRef(w http.ResponseWriter, r *http.Request) *mod
 // --- GitHub Repos ---
 
 func (h *ProjectHandler) ListGitHubRepos(w http.ResponseWriter, r *http.Request) {
-	if h.gitProv == nil {
+	gp := h.gitProv()
+	if gp == nil {
 		http.Error(w, `{"error":"git provider not configured"}`, http.StatusInternalServerError)
 		return
 	}
-	repos, err := h.gitProv.ListAccessibleRepos(r.Context())
+	repos, err := gp.ListAccessibleRepos(r.Context())
 	if err != nil {
 		http.Error(w, `{"error":"failed to list repos: `+err.Error()+`"}`, http.StatusInternalServerError)
 		return

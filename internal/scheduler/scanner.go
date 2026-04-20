@@ -14,9 +14,11 @@ import (
 )
 
 // RunIssueScanner periodically scans auto-mode projects for issues matching label rules.
-func RunIssueScanner(ctx context.Context, client *ent.Client, settingsMgr *settings.Manager, gitProv gitprovider.GitProvider) {
-	if gitProv == nil {
-		slog.Info("issue scanner disabled: no git provider configured")
+// It resolves the active git provider through the manager on every tick so
+// settings changes take effect without restarting the process.
+func RunIssueScanner(ctx context.Context, client *ent.Client, settingsMgr *settings.Manager, gitProvMgr *gitprovider.Manager) {
+	if gitProvMgr == nil {
+		slog.Info("issue scanner disabled: no git provider manager")
 		return
 	}
 
@@ -31,6 +33,10 @@ func RunIssueScanner(ctx context.Context, client *ent.Client, settingsMgr *setti
 			slog.Info("issue scanner stopped")
 			return
 		case <-ticker.C:
+			gitProv := gitProvMgr.Current()
+			if gitProv == nil {
+				continue
+			}
 			scanProjects(ctx, client, settingsMgr, gitProv)
 		}
 	}

@@ -21,6 +21,7 @@ import (
 	"github.com/cloverstd/ccmate/internal/ent"
 	"github.com/cloverstd/ccmate/internal/ent/enttest"
 	enttask "github.com/cloverstd/ccmate/internal/ent/task"
+	"github.com/cloverstd/ccmate/internal/gitprovider"
 	"github.com/cloverstd/ccmate/internal/model"
 	"github.com/cloverstd/ccmate/internal/scheduler"
 	"github.com/cloverstd/ccmate/internal/settings"
@@ -70,9 +71,11 @@ func setupTestEnv(t *testing.T) *testEnv {
 	sched := scheduler.New(client, settingsMgr, broker)
 	registry := agentprovider.NewRegistry()
 	registry.Register(&mockagent.Factory{})
-	sched.SetProviders(nil, registry)
+	gpRegistry := gitprovider.NewRegistry()
+	gitProvMgr := gitprovider.NewManager(gpRegistry)
+	sched.SetProviders(gitProvMgr, registry)
 
-	router := api.NewRouter(client, cfg, broker, sched, passkeySvc, nil, settingsMgr)
+	router := api.NewRouter(client, cfg, broker, sched, passkeySvc, gitProvMgr, settingsMgr, nil)
 
 	cookie, _ := passkeySvc.EncodeSession("ccmate_session", map[string]string{
 		"user": "admin", "ts": time.Now().Format(time.RFC3339),
