@@ -178,7 +178,7 @@ func (a *Adapter) emitEvent(ch chan<- model.AgentEvent, raw map[string]interface
 	case "turn.started":
 		ch <- model.AgentEvent{Type: model.AgentEventRunStatus, Payload: map[string]interface{}{"status": "running"}}
 	case "turn.completed":
-		ch <- model.AgentEvent{Type: model.AgentEventRunStatus, Payload: map[string]interface{}{"status": "completed"}}
+		ch <- model.AgentEvent{Type: model.AgentEventTurnCompleted, Payload: map[string]interface{}{}}
 	case "item.started":
 		if item, ok := raw["item"].(map[string]interface{}); ok {
 			a.emitItemStarted(ch, item)

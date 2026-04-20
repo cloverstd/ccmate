@@ -2,7 +2,7 @@
 #
 # ccmate installer
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/cloverstd/ccmate/master/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/cloverstd/ccmate/main/install.sh | bash
 #   curl -fsSL ... | bash -s -- --version v1.0.0 --systemd
 #
 
@@ -42,7 +42,7 @@ Options:
 
 Examples:
   # Install latest stable
-  curl -fsSL https://raw.githubusercontent.com/cloverstd/ccmate/master/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/cloverstd/ccmate/main/install.sh | bash
 
   # Install with systemd service (runs as current user)
   curl -fsSL ... | bash -s -- --systemd
@@ -203,11 +203,12 @@ LimitNOFILE=65536
 Environment=HOME=${svc_home}
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${svc_home}/.local/bin:${svc_home}/.npm-global/bin
 
-# Security hardening (allow access to user HOME for agent credentials)
+# Security hardening. Agent CLIs (claude, codex) read credentials from HOME and may
+# write session state/cache there, so HOME is RW. Config is RO.
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=${DATA_DIR}
-ReadOnlyPaths=${CONFIG_DIR} ${svc_home}
+ReadWritePaths=${DATA_DIR} ${svc_home}
+ReadOnlyPaths=${CONFIG_DIR}
 PrivateTmp=true
 
 [Install]
@@ -258,7 +259,7 @@ main() {
     echo "  ${BINARY_NAME} -config config.yaml"
     echo ""
     echo "To set up as a systemd service, re-run with --systemd:"
-    echo "  curl -fsSL https://raw.githubusercontent.com/${REPO}/master/install.sh | bash -s -- --systemd"
+    echo "  curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash -s -- --systemd"
   fi
 
   echo ""

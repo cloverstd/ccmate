@@ -242,11 +242,12 @@ func (a *Adapter) StreamEvents(ctx context.Context, handle *agentprovider.Sessio
 				continue
 			}
 
-			event := translateClaudeEvent(raw)
-			select {
-			case ch <- event:
-			case <-ctx.Done():
-				return
+			for _, event := range translateClaudeEvent(raw) {
+				select {
+				case ch <- event:
+				case <-ctx.Done():
+					return
+				}
 			}
 		}
 
@@ -257,11 +258,6 @@ func (a *Adapter) StreamEvents(ctx context.Context, handle *agentprovider.Sessio
 				Type:    model.AgentEventError,
 				Payload: map[string]interface{}{"message": fmt.Sprintf("claude exited with error: %v", exitErr)},
 			}
-		}
-
-		ch <- model.AgentEvent{
-			Type:    model.AgentEventRunStatus,
-			Payload: map[string]interface{}{"status": "completed"},
 		}
 	}()
 
@@ -314,32 +310,24 @@ func (a *Adapter) writeJSON(msg interface{}) error {
 	return err
 }
 
-// translateClaudeEvent converts Claude Code stream-json events to unified AgentEvent.
-func translateClaudeEvent(raw map[string]interface{}) model.AgentEvent {
+// translateClaudeEvent converts Claude Code stream-json events to unified AgentEvents.
+// A single raw event may produce multiple unified events (e.g. tool_result blocks).
+func translateClaudeEvent(raw map[string]interface{}) []model.AgentEvent {
 	eventType, _ := raw["type"].(string)
 
 	switch eventType {
 	case "system":
-		// System metadata — extract session ID for resume capability
-		payload := map[string]interface{}{"status": "system"}
+		// System metadata — preserve under raw key, do not leak status/subtype into runner's break condition.
+		payload := map[string]interface{}{"subtype_kind": "system", "raw": raw}
 		if sid, ok := raw["session_id"].(string); ok {
 			payload["session_id"] = sid
 		}
 		if subtype, ok := raw["subtype"].(string); ok {
 			payload["subtype"] = subtype
 		}
-		for k, v := range raw {
-			if k != "type" {
-				payload[k] = v
-			}
-		}
-		return model.AgentEvent{
-			Type:    model.AgentEventRunStatus,
-			Payload: payload,
-		}
+		return []model.AgentEvent{{Type: model.AgentEventRunStatus, Payload: payload}}
 
 	case "assistant":
-		// Extract text and tool_use from content blocks
 		var textParts []string
 		var toolCalls []map[string]interface{}
 
@@ -366,49 +354,79 @@ func translateClaudeEvent(raw map[string]interface{}) model.AgentEvent {
 			}
 		}
 
-		// If there are tool calls, emit them
 		if len(toolCalls) > 0 {
-			return model.AgentEvent{
+			return []model.AgentEvent{{
 				Type: model.AgentEventToolCall,
 				Payload: map[string]interface{}{
 					"tools": toolCalls,
 					"text":  strings.Join(textParts, "\n"),
 				},
-			}
+			}}
 		}
 
-		return model.AgentEvent{
+		return []model.AgentEvent{{
 			Type:    model.AgentEventMessageDelta,
 			Payload: map[string]interface{}{"content": strings.Join(textParts, "\n")},
-		}
+		}}
 
 	case "user":
-		// User message echo - treat as run status
-		return model.AgentEvent{
-			Type:    model.AgentEventRunStatus,
-			Payload: map[string]interface{}{"status": "user_message", "raw": raw},
+		// Claude echoes tool_result blocks inside a user message. Surface them as tool.result events
+		// so the runner persists them and the UI can pair them with the originating tool.call.
+		var events []model.AgentEvent
+		if msg, ok := raw["message"].(map[string]interface{}); ok {
+			if contentBlocks, ok := msg["content"].([]interface{}); ok {
+				for _, block := range contentBlocks {
+					b, ok := block.(map[string]interface{})
+					if !ok {
+						continue
+					}
+					if b["type"] == "tool_result" {
+						events = append(events, model.AgentEvent{
+							Type: model.AgentEventToolResult,
+							Payload: map[string]interface{}{
+								"tool_use_id": b["tool_use_id"],
+								"is_error":    b["is_error"],
+								"result": map[string]interface{}{
+									"content":     b["content"],
+									"is_error":    b["is_error"],
+									"tool_use_id": b["tool_use_id"],
+								},
+							},
+						})
+					}
+				}
+			}
 		}
+		if len(events) > 0 {
+			return events
+		}
+		// Non-tool-result user echo (rare) — record without leaking a "status" field.
+		return []model.AgentEvent{{
+			Type:    model.AgentEventRunStatus,
+			Payload: map[string]interface{}{"subtype_kind": "user_echo", "raw": raw},
+		}}
 
 	case "result":
-		// Final result with token usage
-		resultText, _ := raw["result"].(string)
-		return model.AgentEvent{
-			Type: model.AgentEventMessageCompleted,
+		// Terminal event for a turn. The final text was already streamed via assistant
+		// content blocks as MessageDelta, so we do NOT re-emit it as MessageCompleted —
+		// doing so would duplicate the message in the UI. Only signal turn completion.
+		return []model.AgentEvent{{
+			Type: model.AgentEventTurnCompleted,
 			Payload: map[string]interface{}{
-				"content":      resultText,
-				"cost_usd":     raw["cost_usd"],
-				"duration_ms":  raw["duration_ms"],
-				"is_error":     raw["is_error"],
-				"session_id":   raw["session_id"],
+				"session_id":  raw["session_id"],
+				"cost_usd":    raw["cost_usd"],
+				"duration_ms": raw["duration_ms"],
+				"is_error":    raw["is_error"],
 			},
-		}
+		}}
 
 	default:
-		// Pass through unknown events (tool_result, etc.)
-		return model.AgentEvent{
+		// Unknown event — wrap raw under a namespaced key so nested fields (e.g. status on
+		// subagent task_notification) don't leak into the runner's break condition.
+		return []model.AgentEvent{{
 			Type:    model.AgentEventRunStatus,
-			Payload: raw,
-		}
+			Payload: map[string]interface{}{"subtype_kind": eventType, "raw": raw},
+		}}
 	}
 }
 

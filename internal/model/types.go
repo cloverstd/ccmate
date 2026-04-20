@@ -181,6 +181,7 @@ const (
 	AgentEventToolCall         AgentEventType = "tool.call"
 	AgentEventToolResult       AgentEventType = "tool.result"
 	AgentEventRunStatus        AgentEventType = "run.status"
+	AgentEventTurnCompleted    AgentEventType = "turn.completed"
 	AgentEventArtifactCreated  AgentEventType = "artifact.created"
 	AgentEventError            AgentEventType = "error"
 )

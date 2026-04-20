@@ -2,8 +2,9 @@ name: Release
 
 on:
   push:
-    branches: [master]
+    branches: [main]
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -105,7 +106,7 @@ jobs:
           cp dist/*.tar.gz release/
           cd release && sha256sum *.tar.gz > checksums.txt
 
-      # Pre-release for master branch pushes
+      # Pre-release for main branch pushes
       - name: Pre-release
         if: "!startsWith(github.ref, 'refs/tags/v')"
         env:
@@ -116,7 +117,7 @@ jobs:
           gh release delete "${TAG}" --yes --cleanup-tag 2>/dev/null || true
           gh release create "${TAG}" release/* \
             --title "Dev Build ${SHORT_SHA}" \
-            --notes "Automated pre-release from \`master\` branch.
+            --notes "Automated pre-release from \`main\` branch.
 
           Commit: ${GITHUB_SHA}
           Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \

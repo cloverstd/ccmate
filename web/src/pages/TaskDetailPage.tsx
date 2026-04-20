@@ -73,19 +73,26 @@ export default function TaskDetailPage() {
   useEffect(() => {
     if (!taskId || !task || !isActiveStatus(task.status)) return
     const unsub = subscribeToTaskEvents(taskId, (event) => {
-      setLiveEvents((prev) => [...prev, { ...event, time: new Date().toLocaleTimeString() }])
+      const seq = Number((event.data as Record<string, unknown> | null)?.['_sequence'] ?? 0)
+      setLiveEvents((prev) => [...prev, { ...event, time: new Date().toLocaleTimeString(), sequence: seq }])
       if (event.type === 'run.step' || event.type === 'tool.call' || event.type === 'message.delta') setThinking(true)
       if (event.type === 'run.status') {
         const s = (event.data as Record<string, unknown>)?.status
-        if (s === 'completed') setThinking(false)
         if (s === 'started' || s === 'running') setThinking(true)
+        if (s === 'awaiting_user_confirmation') setThinking(false)
       }
-      if (event.type === 'task.failed') setThinking(false)
+      if (event.type === 'turn.completed') setThinking(false)
+      if (event.type === 'task.failed' || event.type === 'task.completed') setThinking(false)
       if (event.type === 'task.completed' || event.type === 'task.failed')
         queryClient.invalidateQueries({ queryKey: ['task', taskId] })
     })
     return unsub
   }, [taskId, task?.status])
+
+  // Whenever the task leaves the running state, the agent isn't producing output — clear Thinking.
+  useEffect(() => {
+    if (task && task.status !== 'running') setThinking(false)
+  }, [task?.status])
 
   useEffect(() => {
     if (isNearBottomRef.current) {
@@ -97,9 +104,36 @@ export default function TaskDetailPage() {
   if (!task) return <div className="text-gray-500">Task not found</div>
 
   const sessions = task.edges.sessions || []
+  const agentSessions = [...sessions]
+    .filter((s) => !!s.provider_session_key)
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  const latestAgentSession = agentSessions[0]
+  const resumeHint = (() => {
+    if (!latestAgentSession) return null
+    const key = latestAgentSession.provider_session_key
+    switch (agentProfile?.provider) {
+      case 'claude_code': return `claude --resume ${key}`
+      case 'codex': return null
+      default: return null
+    }
+  })()
+  const copySessionKey = async (key: string) => {
+    try { await navigator.clipboard.writeText(key); toast('Session ID copied', 'success') }
+    catch { toast('Copy failed', 'error') }
+  }
   const historyMessages: SessionMessage[] = sessions.flatMap((s) => s.edges?.messages || []).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
   const historyEvents: SessionEvent[] = sessions.flatMap((s) => s.edges?.events || []).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+  const historyMaxSeq = Math.max(
+    0,
+    ...historyMessages.map((m) => m.sequence),
+    ...historyEvents.map((e) => e.sequence),
+  )
+  // Drop live events that have already been persisted & polled back via history to avoid duplicates.
+  const unseenLiveEvents = liveEvents.filter((e) => e.sequence === 0 || e.sequence > historyMaxSeq)
   const taskActive = isActiveStatus(task.status)
+  // Agent is actively producing output only while running. waiting_user means the agent has
+  // parked — any still-unresolved tool calls should render as "no result" rather than spinning.
+  const agentBusy = task.status === 'running'
   const canSend = taskActive && !thinking && !sendMutation.isPending
 
   return (
@@ -133,12 +167,43 @@ export default function TaskDetailPage() {
             {agentProfile && (
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <Tag color="purple">{agentProfile.provider}</Tag>
-                <Tag color="gray">{agentProfile.model}</Tag>
+                <Tag color="gray">{agentProfile.model || 'default'}</Tag>
                 {agentProfile.supports_image && <span className="text-gray-400" title="Supports image">img</span>}
                 {agentProfile.supports_resume && <span className="text-gray-400" title="Supports resume">resume</span>}
               </div>
             )}
             {!agentProfile && task.agent_profile_id != null && <p className="text-sm text-gray-500">Agent #{task.agent_profile_id}</p>}
+            {latestAgentSession && (
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-gray-500">Agent Session:</span>
+                <button onClick={() => copySessionKey(latestAgentSession.provider_session_key)}
+                  className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 font-mono text-gray-700 hover:bg-gray-200"
+                  title="Click to copy">
+                  {latestAgentSession.provider_session_key}
+                </button>
+                {resumeHint && (
+                  <button onClick={() => copySessionKey(resumeHint)}
+                    className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-1 font-mono text-blue-700 hover:bg-blue-100"
+                    title="Click to copy resume command">
+                    {resumeHint}
+                  </button>
+                )}
+                {agentSessions.length > 1 && (
+                  <details className="inline">
+                    <summary className="cursor-pointer text-gray-500 hover:text-gray-700">history ({agentSessions.length - 1})</summary>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {agentSessions.slice(1).map((s) => (
+                        <button key={s.id} onClick={() => copySessionKey(s.provider_session_key)}
+                          className="inline-flex items-center rounded-full bg-gray-50 px-2 py-0.5 font-mono text-gray-600 hover:bg-gray-100"
+                          title={`session #${s.id} · ${new Date(s.created_at).toLocaleString()}`}>
+                          {s.provider_session_key}
+                        </button>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </div>
+            )}
             {promptSnapshot && (
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="text-gray-500">Prompt:</span>
@@ -225,14 +290,14 @@ export default function TaskDetailPage() {
       {/* Content */}
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden flex-1 min-h-0 flex flex-col mt-4">
         {activeTab === 'messages' ? (
-          <MessagesTab historyMessages={historyMessages} liveEvents={liveEvents} thinking={thinking}
-            taskActive={taskActive} canSend={canSend} messageInput={messageInput} setMessageInput={setMessageInput}
+          <MessagesTab historyMessages={historyMessages} liveEvents={unseenLiveEvents} thinking={thinking}
+            taskActive={taskActive} agentBusy={agentBusy} canSend={canSend} messageInput={messageInput} setMessageInput={setMessageInput}
             sendMutation={sendMutation} uploadMutation={uploadMutation} fileInputRef={fileInputRef} endRef={endRef}
             scrollContainerRef={scrollContainerRef} isNearBottomRef={isNearBottomRef}
             showScrollBtn={showScrollBtn} setShowScrollBtn={setShowScrollBtn}
             promptSnapshot={promptSnapshot} pendingMessages={pendingMessages} />
         ) : activeTab === 'events' ? (
-          <EventsTab historyEvents={historyEvents} liveEvents={liveEvents} endRef={endRef}
+          <EventsTab historyEvents={historyEvents} liveEvents={unseenLiveEvents} endRef={endRef}
             scrollContainerRef={scrollContainerRef} isNearBottomRef={isNearBottomRef}
             showScrollBtn={showScrollBtn} setShowScrollBtn={setShowScrollBtn} />
         ) : activeTab === 'issue' ? (
@@ -249,7 +314,7 @@ export default function TaskDetailPage() {
 // Grouping: message ←→ tool_section ←→ message
 // ============================================================
 
-type LiveEvent = { type: string; data: unknown; time: string }
+type LiveEvent = { type: string; data: unknown; time: string; sequence: number }
 
 /** A single tool.call, optionally paired with one tool.result */
 type ToolInvocation = {
@@ -424,13 +489,13 @@ function handleScroll(e: React.UIEvent<HTMLDivElement>, isNearBottomRef: React.M
 }
 
 function MessagesTab({
-  historyMessages, liveEvents, thinking, taskActive, canSend,
+  historyMessages, liveEvents, thinking, taskActive, agentBusy, canSend,
   messageInput, setMessageInput, sendMutation, uploadMutation, fileInputRef, endRef,
   scrollContainerRef, isNearBottomRef, showScrollBtn, setShowScrollBtn,
   promptSnapshot, pendingMessages,
 }: {
   historyMessages: SessionMessage[]; liveEvents: LiveEvent[]; thinking: boolean
-  taskActive: boolean; canSend: boolean; messageInput: string; setMessageInput: (v: string) => void
+  taskActive: boolean; agentBusy: boolean; canSend: boolean; messageInput: string; setMessageInput: (v: string) => void
   sendMutation: { mutate: (v: string) => void; isPending: boolean }; uploadMutation: { mutate: (f: File) => void }
   fileInputRef: React.RefObject<HTMLInputElement | null>; endRef: React.RefObject<HTMLDivElement | null>
   scrollContainerRef: React.RefObject<HTMLDivElement | null>; isNearBottomRef: React.MutableRefObject<boolean>
@@ -459,13 +524,13 @@ function MessagesTab({
         {grouped.map((item, i) => {
           if (item.kind === 'user') return <UserBubble key={`h-${i}`} msg={item.msg} />
           if (item.kind === 'message') return <MessageBubble key={`h-${i}`} msg={item.msg} />
-          return <ToolSectionView key={`h-${i}`} invocations={item.invocations} loading={item.loading} defaultCollapsed={true} taskActive={taskActive} />
+          return <ToolSectionView key={`h-${i}`} invocations={item.invocations} loading={item.loading} defaultCollapsed={true} taskActive={agentBusy} />
         })}
 
         {groupedLive.map((item, i) => {
           if (item.kind === 'message') return <LiveMessageBubble key={`l-${i}`} event={item.event} />
           if (item.kind === 'status') return <LiveStatusBubble key={`l-${i}`} event={item.event} />
-          return <ToolSectionView key={`l-${i}`} invocations={item.invocations} loading={item.loading} defaultCollapsed={true} taskActive={true} />
+          return <ToolSectionView key={`l-${i}`} invocations={item.invocations} loading={item.loading && agentBusy} defaultCollapsed={true} taskActive={agentBusy} />
         })}
 
         {pendingMessages.map((msg) => <UserBubble key={`pending-${msg.id}`} msg={msg} />)}
@@ -509,7 +574,16 @@ function MessagesTab({
 function ToolSectionView({ invocations, loading, defaultCollapsed, taskActive }: {
   invocations: ToolInvocation[]; loading: boolean; defaultCollapsed: boolean; taskActive: boolean
 }) {
-  const [collapsed, setCollapsed] = useState(defaultCollapsed)
+  // While running, auto-expand so the user sees live tool activity; once finished, auto-collapse.
+  // User manual toggles win until the loading state transitions again.
+  const [collapsed, setCollapsed] = useState(loading ? false : defaultCollapsed)
+  const prevLoading = useRef(loading)
+  useEffect(() => {
+    if (prevLoading.current !== loading) {
+      setCollapsed(!loading ? true : false)
+      prevLoading.current = loading
+    }
+  }, [loading])
   const [expandAll, setExpandAll] = useState(false)
 
   if (invocations.length === 0 && !loading) return null
@@ -573,15 +647,17 @@ const statusConfig = {
 
 function ToolInvocationRow({ inv, taskActive, forceExpanded }: { inv: ToolInvocation; taskActive: boolean; forceExpanded?: boolean }) {
   const [localOverride, setLocalOverride] = useState<boolean | null>(null)
-  // Reset local override when forceExpanded changes
+  const isRunning = inv.status === 'no_result' && taskActive
+  // Reset local override when forceExpanded or running-state changes so running→completed auto-collapses.
   const prevForce = useRef(forceExpanded)
-  if (prevForce.current !== forceExpanded) {
+  const prevRunning = useRef(isRunning)
+  if (prevForce.current !== forceExpanded || prevRunning.current !== isRunning) {
     prevForce.current = forceExpanded
+    prevRunning.current = isRunning
     setLocalOverride(null)
   }
-  const expanded = localOverride !== null ? localOverride : (forceExpanded || false)
-  const isRunning = inv.status === 'no_result' && taskActive
-  const cfg = statusConfig[inv.status === 'no_result' && taskActive ? 'running' : inv.status]
+  const expanded = localOverride !== null ? localOverride : (forceExpanded || isRunning)
+  const cfg = statusConfig[isRunning ? 'running' : inv.status]
 
   return (
     <div>

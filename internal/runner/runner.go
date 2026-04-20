@@ -302,7 +302,13 @@ func (r *Runner) RunTask(ctx context.Context, taskID int) error {
 				SetContent(string(resultJSON)).SetSequence(sequence).Save(ctx)
 		}
 
-		r.broker.Publish(topic, sse.Event{Type: string(event.Type), Data: sanitizedPayload})
+		// Attach sequence to SSE payload so the frontend can dedupe against polled history.
+		ssePayload := make(map[string]interface{}, len(sanitizedPayload)+1)
+		for k, v := range sanitizedPayload {
+			ssePayload[k] = v
+		}
+		ssePayload["_sequence"] = sequence
+		r.broker.Publish(topic, sse.Event{Type: string(event.Type), Data: ssePayload})
 
 		// Track errors from agent
 		if event.Type == model.AgentEventError {
@@ -313,10 +319,10 @@ func (r *Runner) RunTask(ctx context.Context, taskID int) error {
 			}
 		}
 
-		if event.Type == model.AgentEventRunStatus {
-			if status, ok := event.Payload["status"].(string); ok && status == "completed" {
-				break
-			}
+		// Turn is done when the adapter explicitly signals it, or the channel closes.
+		// The adapter layer owns provider-specific completion detection; runner stays provider-neutral.
+		if event.Type == model.AgentEventTurnCompleted {
+			break
 		}
 	}
 
