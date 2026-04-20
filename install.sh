@@ -175,7 +175,7 @@ server:
 
 database:
   driver: sqlite3
-  dsn: "${DATA_DIR}/ccmate.db"
+  dsn: "${DATA_DIR}/ccmate.db?_fk=1&_journal=WAL"
 YAML
     sudo chown "${svc_user}:${svc_group}" "${CONFIG_DIR}/config.yaml"
     echo "Created default config at ${CONFIG_DIR}/config.yaml"
