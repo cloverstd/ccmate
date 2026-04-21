@@ -179,11 +179,27 @@ export const tasksApi = {
   },
 }
 
+const TASK_EVENT_TYPES = [
+  'message.delta','message.completed','tool.call','tool.result','run.status',
+  'task.created','task.status','task.completed','task.failed','message.created',
+]
+
 export function subscribeToTaskEvents(taskId: number, onEvent: (event: { type: string; data: unknown }) => void) {
   const eventSource = new EventSource(`${BASE_URL}/tasks/${taskId}/events/stream`)
   eventSource.onmessage = (e) => { try { onEvent({ type: e.type || 'message', data: JSON.parse(e.data) }) } catch {} }
   eventSource.addEventListener('connected', () => onEvent({ type: 'connected', data: {} }))
-  for (const type of ['message.delta','message.completed','tool.call','tool.result','run.status','task.completed','task.failed','message.created']) {
+  for (const type of TASK_EVENT_TYPES) {
+    eventSource.addEventListener(type, (e) => { try { onEvent({ type, data: JSON.parse(e.data) }) } catch {} })
+  }
+  return () => eventSource.close()
+}
+
+// Subscribe to cross-task lifecycle events (creation, status changes). Used by global
+// views like the sidebar that would otherwise need to poll for task counts.
+export function subscribeToTasksEvents(onEvent: (event: { type: string; data: unknown }) => void) {
+  const eventSource = new EventSource(`${BASE_URL}/tasks/events/stream`)
+  eventSource.addEventListener('connected', () => onEvent({ type: 'connected', data: {} }))
+  for (const type of ['task.created','task.status','task.completed','task.failed']) {
     eventSource.addEventListener(type, (e) => { try { onEvent({ type, data: JSON.parse(e.data) }) } catch {} })
   }
   return () => eventSource.close()

@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate, matchPath } from 'react-router-dom'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { projectsApi, tasksApi, type CurrentUser } from '../lib/api'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { projectsApi, tasksApi, subscribeToTasksEvents, type CurrentUser } from '../lib/api'
 import Icon, { Logo } from './Icon'
 import { Btn, Kbd } from './ui'
 
@@ -52,13 +52,22 @@ export default function Layout({ children, user, onLogout }: { children: ReactNo
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  const queryClient = useQueryClient()
   const { data: projects } = useQuery({ queryKey: ['projects'], queryFn: projectsApi.list })
   const { data: activeTasks } = useQuery({
     queryKey: ['tasks', 'active-count'],
     queryFn: () => tasksApi.list({ status: 'running' }),
-    refetchInterval: 15000,
   })
   const runningCount = activeTasks?.length ?? 0
+
+  useEffect(() => {
+    const unsub = subscribeToTasksEvents(() => {
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'active-count'] })
+      queryClient.invalidateQueries({ queryKey: ['tasks'] })
+      queryClient.invalidateQueries({ queryKey: ['project-tasks'] })
+    })
+    return unsub
+  }, [queryClient])
 
   const view: 'projects' | 'project' | 'tasks' | 'task' | 'settings' | 'other' = useMemo(() => {
     if (matchPath('/projects/:id', location.pathname)) return 'project'
