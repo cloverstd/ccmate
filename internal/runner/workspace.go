@@ -44,6 +44,23 @@ func (w *Workspace) GitInit(ctx context.Context) error {
 	return cmd.Run()
 }
 
+// SetGitIdentity writes user.name/user.email to the repo-local git config so
+// commits (including those made by the agent subprocess) use the configured
+// identity instead of the host machine's global gitconfig.
+func (w *Workspace) SetGitIdentity(ctx context.Context, name, email string) error {
+	if name == "" || email == "" {
+		return nil
+	}
+	for _, kv := range [][2]string{{"user.name", name}, {"user.email", email}} {
+		cmd := exec.CommandContext(ctx, "git", "config", "--local", kv[0], kv[1])
+		cmd.Dir = w.RepoPath
+		if output, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("git config %s: %w: %s", kv[0], err, string(output))
+		}
+	}
+	return nil
+}
+
 // GitCheckoutBranch creates and checks out a new branch.
 func (w *Workspace) GitCheckoutBranch(ctx context.Context, branchName string) error {
 	cmd := exec.CommandContext(ctx, "git", "checkout", "-b", branchName)

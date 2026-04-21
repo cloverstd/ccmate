@@ -153,6 +153,12 @@ func (r *Runner) RunTask(ctx context.Context, taskID int) error {
 			return r.failTask(ctx, taskID, fmt.Errorf("cloning repo: %w", err))
 		}
 
+		authorName := r.settingsMgr.GetWithDefault(ctx, settings.KeyGitCommitAuthorName, "ccmate-bot")
+		authorEmail := r.settingsMgr.GetWithDefault(ctx, settings.KeyGitCommitAuthorEmail, "ccmate-bot@users.noreply.github.com")
+		if err := ws.SetGitIdentity(ctx, authorName, authorEmail); err != nil {
+			return r.failTask(ctx, taskID, fmt.Errorf("setting git identity: %w", err))
+		}
+
 		logStep("branch", fmt.Sprintf("Creating branch %s", branchName))
 		if err := ws.GitCheckoutBranch(ctx, branchName); err != nil {
 			return r.failTask(ctx, taskID, fmt.Errorf("creating branch: %w", err))

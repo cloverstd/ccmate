@@ -28,6 +28,8 @@ const (
 	KeyGitHubAppID       = "github_app_id"
 	KeyGitHubInstallationID = "github_installation_id"
 	KeyGitHubPrivateKeyPath = "github_private_key_path"
+	KeyGitCommitAuthorName  = "git_commit_author_name"
+	KeyGitCommitAuthorEmail = "git_commit_author_email"
 	KeyAgentProviders    = "agent_providers"      // JSON array
 	KeyLabelRules        = "label_rules"          // JSON array
 	KeyMaxConcurrency    = "max_concurrency"
