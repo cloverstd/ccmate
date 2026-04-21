@@ -200,6 +200,17 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          <Separator />
+
+          <div>
+            <p className="text-sm font-medium text-gray-700 mb-1">Commit Identity</p>
+            <p className="text-xs text-gray-500 mb-3">Author used for git commits the agent creates. Leave blank to use the defaults.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {field("Author Name", "git_commit_author_name", "text", { placeholder: "ccmate-bot" })}
+              {field("Author Email", "git_commit_author_email", "text", { placeholder: "ccmate-bot@users.noreply.github.com" })}
+            </div>
+          </div>
+
           <div className="flex items-center gap-3">
             <Btn variant="secondary" onClick={() => recheckPerms()} disabled={permsTesting}>
               {permsTesting ? 'Testing...' : 'Test Permissions'}
@@ -212,7 +223,7 @@ export default function SettingsPage() {
           </div>
         </CardContent>
         <CardFooter>
-          <Btn onClick={() => saveSection(['github_personal_token', 'github_webhook_secret', 'github_app_id', 'github_installation_id', 'github_private_key_path'])}>Save API</Btn>
+          <Btn onClick={() => saveSection(['github_personal_token', 'github_webhook_secret', 'github_app_id', 'github_installation_id', 'github_private_key_path', 'git_commit_author_name', 'git_commit_author_email'])}>Save API</Btn>
         </CardFooter>
       </Card>
 
