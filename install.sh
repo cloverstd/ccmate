@@ -15,7 +15,8 @@ cleanup_tmp() { [[ -n "$TMPDIR_CCMATE" ]] && rm -rf "$TMPDIR_CCMATE"; }
 trap cleanup_tmp EXIT
 
 REPO="cloverstd/ccmate"
-INSTALL_DIR="/usr/local/bin"
+INSTALL_DIR=""
+INSTALL_DIR_EXPLICIT=false
 VERSION=""
 BINARY_NAME="ccmate"
 SETUP_SYSTEMD=false
@@ -27,7 +28,7 @@ DATA_DIR="/var/lib/ccmate"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version|-v) VERSION="$2"; shift 2 ;;
-    --dir|-d) INSTALL_DIR="$2"; shift 2 ;;
+    --dir|-d) INSTALL_DIR="$2"; INSTALL_DIR_EXPLICIT=true; shift 2 ;;
     --systemd) SETUP_SYSTEMD=true; shift ;;
     --user|-u) SERVICE_USER="$2"; shift 2 ;;
     --config-dir) CONFIG_DIR="$2"; shift 2 ;;
@@ -38,7 +39,8 @@ Usage: install.sh [OPTIONS]
 
 Options:
   --version, -v VERSION   Version to install (default: latest stable, 'dev' for pre-release)
-  --dir, -d DIR           Binary install directory (default: /usr/local/bin)
+  --dir, -d DIR           Binary install directory
+                          (default: /usr/local/bin, or <data-dir>/bin with --systemd)
   --systemd               Set up systemd service (Linux only)
   --user, -u USER         User to run the service as (default: current user)
                           The user must have claude/codex credentials in their HOME.
@@ -124,12 +126,39 @@ install_binary() {
 
   tar xzf "${TMPDIR_CCMATE}/ccmate.tar.gz" -C "$TMPDIR_CCMATE"
 
-  if [[ -w "$INSTALL_DIR" ]]; then
-    mv "${TMPDIR_CCMATE}/ccmate-${platform}" "${INSTALL_DIR}/${BINARY_NAME}"
-  else
-    sudo mv "${TMPDIR_CCMATE}/ccmate-${platform}" "${INSTALL_DIR}/${BINARY_NAME}"
+  # Ensure install dir exists and is owned by the service user so the running
+  # process can later overwrite the binary (required by the in-app updater).
+  local owner_user owner_group
+  if [[ "$SETUP_SYSTEMD" == true ]]; then
+    owner_user="${SERVICE_USER:-$(whoami)}"
+    owner_group="$(id -gn "$owner_user" 2>/dev/null || echo "$owner_user")"
   fi
-  chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
+
+  if [[ -w "$INSTALL_DIR" ]]; then
+    mkdir -p "$INSTALL_DIR"
+    mv "${TMPDIR_CCMATE}/ccmate-${platform}" "${INSTALL_DIR}/${BINARY_NAME}"
+    chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
+  else
+    sudo mkdir -p "$INSTALL_DIR"
+    sudo mv "${TMPDIR_CCMATE}/ccmate-${platform}" "${INSTALL_DIR}/${BINARY_NAME}"
+    sudo chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
+    # For systemd installs, the service user needs to overwrite this binary
+    # at self-update time. If INSTALL_DIR is a ccmate-owned path (under
+    # DATA_DIR), hand ownership of the directory to the service user. For
+    # shared system paths like /usr/local/bin, only chown the binary itself
+    # and warn that self-update needs a writable parent dir to create tempfiles.
+    if [[ -n "${owner_user:-}" ]]; then
+      sudo chown "${owner_user}:${owner_group}" "${INSTALL_DIR}/${BINARY_NAME}"
+      if [[ "$INSTALL_DIR" == "$DATA_DIR"* ]]; then
+        sudo chown "${owner_user}:${owner_group}" "$INSTALL_DIR"
+      else
+        echo "Warning: ${INSTALL_DIR} is not owned by ${owner_user}."
+        echo "  In-app self-update will fail because it needs to create a temp"
+        echo "  file in ${INSTALL_DIR}. Either re-install without --dir so the"
+        echo "  binary goes under ${DATA_DIR}/bin, or chown ${INSTALL_DIR} to ${owner_user}."
+      fi
+    fi
+  fi
 
   echo "Binary installed to ${INSTALL_DIR}/${BINARY_NAME}"
 }
@@ -209,10 +238,11 @@ Environment=HOME=${svc_home}
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${svc_home}/.local/bin:${svc_home}/.npm-global/bin
 
 # Security hardening. Agent CLIs (claude, codex) read credentials from HOME and may
-# write session state/cache there, so HOME is RW. Config is RO.
+# write session state/cache there, so HOME is RW. Config is RO. The install dir is
+# added to ReadWritePaths so the in-app updater can overwrite the binary.
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=${DATA_DIR} ${svc_home}
+ReadWritePaths=${DATA_DIR} ${svc_home} ${INSTALL_DIR}
 ReadOnlyPaths=${CONFIG_DIR}
 PrivateTmp=true
 
@@ -249,6 +279,19 @@ main() {
 
   platform="$(detect_platform)"
   version="$(resolve_version)"
+
+  # Pick a sensible default INSTALL_DIR based on mode:
+  #   --systemd: service runs under ProtectSystem=strict, which remounts /usr
+  #     read-only. Install into <data-dir>/bin so the in-app updater can
+  #     overwrite the binary in place.
+  #   otherwise: classic /usr/local/bin for manual invocation.
+  if [[ -z "$INSTALL_DIR" ]]; then
+    if [[ "$SETUP_SYSTEMD" == true ]]; then
+      INSTALL_DIR="${DATA_DIR}/bin"
+    else
+      INSTALL_DIR="/usr/local/bin"
+    fi
+  fi
 
   echo "Installing ccmate ${version} for ${platform}..."
   echo ""

@@ -228,6 +228,29 @@ func (u *Updater) Apply(ctx context.Context, tag string) error {
 	assetName := PlatformAsset()
 	url := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s.tar.gz", u.Repo, tag, assetName)
 
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("locate current executable: %w", err)
+	}
+	exe, err = filepath.EvalSymlinks(exe)
+	if err != nil {
+		return fmt.Errorf("resolve executable: %w", err)
+	}
+
+	// Preflight: confirm we can actually write into the binary's directory
+	// before spending minutes on a download. This catches read-only mounts
+	// (e.g. systemd ProtectSystem=strict) and permission issues up front.
+	dir := filepath.Dir(exe)
+	if probe, probeErr := os.CreateTemp(dir, ".ccmate-probe-*"); probeErr != nil {
+		return fmt.Errorf("binary directory %s is not writable (%w); "+
+			"move the binary to a writable path — for systemd installs this "+
+			"is usually under the service's data dir (e.g. /var/lib/ccmate/bin) "+
+			"and the unit's ReadWritePaths", dir, probeErr)
+	} else {
+		probe.Close()
+		os.Remove(probe.Name())
+	}
+
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	dl := &http.Client{Timeout: 5 * time.Minute}
 	resp, err := dl.Do(req)
@@ -239,17 +262,7 @@ func (u *Updater) Apply(ctx context.Context, tag string) error {
 		return fmt.Errorf("download returned %d (url=%s)", resp.StatusCode, url)
 	}
 
-	exe, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("locate current executable: %w", err)
-	}
-	exe, err = filepath.EvalSymlinks(exe)
-	if err != nil {
-		return fmt.Errorf("resolve executable: %w", err)
-	}
-
 	// Extract the target binary into a temp file next to the executable.
-	dir := filepath.Dir(exe)
 	tmp, err := os.CreateTemp(dir, ".ccmate-new-*")
 	if err != nil {
 		return fmt.Errorf("create temp: %w", err)
