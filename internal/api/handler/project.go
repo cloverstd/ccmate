@@ -44,6 +44,7 @@ type CreateProjectRequest struct {
 	DefaultBranch           string `json:"default_branch"`
 	AutoMode                bool   `json:"auto_mode"`
 	DefaultAgentProfileID   *int   `json:"default_agent_profile_id"`
+	ReviewAgentProfileID    *int   `json:"review_agent_profile_id"`
 	DefaultPromptTemplateID *int   `json:"default_prompt_template_id"`
 	PromptTemplateScope     string `json:"prompt_template_scope"`
 }
@@ -89,6 +90,13 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		builder = builder.SetDefaultAgentProfileID(*req.DefaultAgentProfileID)
+	}
+	if req.ReviewAgentProfileID != nil {
+		if _, err := h.client.AgentProfile.Get(r.Context(), *req.ReviewAgentProfileID); err != nil {
+			http.Error(w, `{"error":"review agent profile not found"}`, http.StatusBadRequest)
+			return
+		}
+		builder = builder.SetReviewAgentProfileID(*req.ReviewAgentProfileID)
 	}
 	if req.DefaultPromptTemplateID != nil {
 		if _, err := h.client.PromptTemplate.Get(r.Context(), *req.DefaultPromptTemplateID); err != nil {
@@ -142,6 +150,15 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 		builder = builder.SetDefaultAgentProfileID(*req.DefaultAgentProfileID)
 	} else {
 		builder = builder.ClearDefaultAgentProfileID()
+	}
+	if req.ReviewAgentProfileID != nil {
+		if _, err := h.client.AgentProfile.Get(r.Context(), *req.ReviewAgentProfileID); err != nil {
+			http.Error(w, `{"error":"review agent profile not found"}`, http.StatusBadRequest)
+			return
+		}
+		builder = builder.SetReviewAgentProfileID(*req.ReviewAgentProfileID)
+	} else {
+		builder = builder.ClearReviewAgentProfileID()
 	}
 	if req.DefaultPromptTemplateID != nil {
 		if _, err := h.client.PromptTemplate.Get(r.Context(), *req.DefaultPromptTemplateID); err != nil {

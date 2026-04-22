@@ -70,6 +70,11 @@ func AgentProfileID(v int) predicate.Task {
 	return predicate.Task(sql.FieldEQ(FieldAgentProfileID, v))
 }
 
+// ReviewIteration applies equality check predicate on the "review_iteration" field. It's identical to ReviewIterationEQ.
+func ReviewIteration(v int) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldReviewIteration, v))
+}
+
 // Priority applies equality check predicate on the "priority" field. It's identical to PriorityEQ.
 func Priority(v int) predicate.Task {
 	return predicate.Task(sql.FieldEQ(FieldPriority, v))
@@ -263,6 +268,46 @@ func TypeIn(vs ...Type) predicate.Task {
 // TypeNotIn applies the NotIn predicate on the "type" field.
 func TypeNotIn(vs ...Type) predicate.Task {
 	return predicate.Task(sql.FieldNotIn(FieldType, vs...))
+}
+
+// ReviewIterationEQ applies the EQ predicate on the "review_iteration" field.
+func ReviewIterationEQ(v int) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldReviewIteration, v))
+}
+
+// ReviewIterationNEQ applies the NEQ predicate on the "review_iteration" field.
+func ReviewIterationNEQ(v int) predicate.Task {
+	return predicate.Task(sql.FieldNEQ(FieldReviewIteration, v))
+}
+
+// ReviewIterationIn applies the In predicate on the "review_iteration" field.
+func ReviewIterationIn(vs ...int) predicate.Task {
+	return predicate.Task(sql.FieldIn(FieldReviewIteration, vs...))
+}
+
+// ReviewIterationNotIn applies the NotIn predicate on the "review_iteration" field.
+func ReviewIterationNotIn(vs ...int) predicate.Task {
+	return predicate.Task(sql.FieldNotIn(FieldReviewIteration, vs...))
+}
+
+// ReviewIterationGT applies the GT predicate on the "review_iteration" field.
+func ReviewIterationGT(v int) predicate.Task {
+	return predicate.Task(sql.FieldGT(FieldReviewIteration, v))
+}
+
+// ReviewIterationGTE applies the GTE predicate on the "review_iteration" field.
+func ReviewIterationGTE(v int) predicate.Task {
+	return predicate.Task(sql.FieldGTE(FieldReviewIteration, v))
+}
+
+// ReviewIterationLT applies the LT predicate on the "review_iteration" field.
+func ReviewIterationLT(v int) predicate.Task {
+	return predicate.Task(sql.FieldLT(FieldReviewIteration, v))
+}
+
+// ReviewIterationLTE applies the LTE predicate on the "review_iteration" field.
+func ReviewIterationLTE(v int) predicate.Task {
+	return predicate.Task(sql.FieldLTE(FieldReviewIteration, v))
 }
 
 // StatusEQ applies the EQ predicate on the "status" field.

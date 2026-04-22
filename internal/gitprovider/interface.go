@@ -20,6 +20,7 @@ type GitProvider interface {
 	GetPullRequest(ctx context.Context, repo model.RepoRef, prNumber int) (*model.PullRequest, error)
 	FindPullRequestByHead(ctx context.Context, repo model.RepoRef, head string) (*model.PullRequest, error)
 	ListPullRequestReviews(ctx context.Context, repo model.RepoRef, prNumber int) ([]model.Review, error)
+	CreatePullRequestReview(ctx context.Context, repo model.RepoRef, prNumber int, req model.CreateReviewRequest) (*model.Review, error)
 	GetPullRequestDiff(ctx context.Context, repo model.RepoRef, prNumber int) (string, error)
 	IsAuthorizedCommenter(ctx context.Context, repo model.RepoRef, user string) (bool, error)
 	CloneRepo(ctx context.Context, repo model.RepoRef, destPath string, branch string) error

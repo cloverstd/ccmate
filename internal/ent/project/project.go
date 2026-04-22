@@ -27,6 +27,8 @@ const (
 	FieldAutoMode = "auto_mode"
 	// FieldDefaultAgentProfileID holds the string denoting the default_agent_profile_id field in the database.
 	FieldDefaultAgentProfileID = "default_agent_profile_id"
+	// FieldReviewAgentProfileID holds the string denoting the review_agent_profile_id field in the database.
+	FieldReviewAgentProfileID = "review_agent_profile_id"
 	// FieldDefaultPromptTemplateID holds the string denoting the default_prompt_template_id field in the database.
 	FieldDefaultPromptTemplateID = "default_prompt_template_id"
 	// FieldPromptTemplateScope holds the string denoting the prompt_template_scope field in the database.
@@ -66,6 +68,7 @@ var Columns = []string{
 	FieldDefaultBranch,
 	FieldAutoMode,
 	FieldDefaultAgentProfileID,
+	FieldReviewAgentProfileID,
 	FieldDefaultPromptTemplateID,
 	FieldPromptTemplateScope,
 	FieldCreatedAt,
@@ -164,6 +167,11 @@ func ByAutoMode(opts ...sql.OrderTermOption) OrderOption {
 // ByDefaultAgentProfileID orders the results by the default_agent_profile_id field.
 func ByDefaultAgentProfileID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldDefaultAgentProfileID, opts...).ToFunc()
+}
+
+// ByReviewAgentProfileID orders the results by the review_agent_profile_id field.
+func ByReviewAgentProfileID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldReviewAgentProfileID, opts...).ToFunc()
 }
 
 // ByDefaultPromptTemplateID orders the results by the default_prompt_template_id field.

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -108,6 +109,13 @@ func (r *Runner) RunTask(ctx context.Context, taskID int) error {
 	agentAdapter, modelName, modelVersion, err := r.resolveAgent(ctx, t)
 	if err != nil {
 		return r.failTask(ctx, taskID, err)
+	}
+
+	// Review tasks have a specialized flow: they don't commit, don't push, don't
+	// wait for user input — they fetch the PR, ask the agent for a structured
+	// verdict, post a GitHub review, and optionally enqueue a review_fix task.
+	if !isResume && t.Type == enttask.TypeReview {
+		return r.runReviewTask(ctx, t, proj, sess, logStep, agentAdapter, modelName, modelVersion, ws, repo, topic, &sequence)
 	}
 
 	if isResume {
@@ -390,6 +398,11 @@ func (r *Runner) RunTask(ctx context.Context, taskID int) error {
 	// Detect PR created by agent if we don't have one yet
 	if t.PrNumber == nil {
 		r.detectAgentPR(ctx, taskID, repo, ws.RepoPath, logStep)
+	}
+
+	// Re-load the task so we see the PR number that may have just been set.
+	if refreshed, rerr := r.client.Task.Query().Where(enttask.ID(taskID)).Only(ctx); rerr == nil {
+		r.enqueueReviewIfEnabled(ctx, refreshed, proj, logStep)
 	}
 
 	_, err = r.client.Task.UpdateOneID(taskID).SetStatus(enttask.StatusWaitingUser).Save(ctx)
@@ -707,3 +720,314 @@ func parseRepoURL(url string) model.RepoRef {
 
 // Ensure strconv is used
 var _ = strconv.Itoa
+
+// reviewVerdict is the structured output we demand from the review agent.
+type reviewVerdict struct {
+	Decision string                `json:"decision"`
+	Summary  string                `json:"summary"`
+	Comments []model.ReviewComment `json:"comments"`
+}
+
+var jsonFencedRE = regexp.MustCompile("(?s)```(?:json)?\\s*(\\{.*?\\})\\s*```")
+
+// extractReviewVerdict pulls the last fenced JSON block out of the agent's
+// final message. Falls back to the last balanced {...} substring.
+func extractReviewVerdict(text string) (*reviewVerdict, error) {
+	matches := jsonFencedRE.FindAllStringSubmatch(text, -1)
+	var candidate string
+	if len(matches) > 0 {
+		candidate = matches[len(matches)-1][1]
+	} else {
+		// Fallback: last {...} block by naive scan
+		start := strings.LastIndex(text, "{")
+		end := strings.LastIndex(text, "}")
+		if start >= 0 && end > start {
+			candidate = text[start : end+1]
+		}
+	}
+	if candidate == "" {
+		return nil, fmt.Errorf("no JSON block found")
+	}
+	var v reviewVerdict
+	if err := json.Unmarshal([]byte(candidate), &v); err != nil {
+		return nil, err
+	}
+	return &v, nil
+}
+
+func (r *Runner) runReviewTask(
+	ctx context.Context,
+	t *ent.Task,
+	proj *ent.Project,
+	sess *ent.Session,
+	logStep func(step, detail string),
+	agentAdapter agentprovider.AgentAdapter,
+	modelName, modelVersion string,
+	ws *Workspace,
+	repo model.RepoRef,
+	topic string,
+	sequence *int,
+) error {
+	taskID := t.ID
+
+	if t.PrNumber == nil {
+		return r.failTask(ctx, taskID, fmt.Errorf("review task missing pr_number"))
+	}
+	prNum := *t.PrNumber
+
+	logStep("init", fmt.Sprintf("Review task #%d for PR #%d (iteration %d)", taskID, prNum, t.ReviewIteration))
+
+	pr, err := r.gitProvider.GetPullRequest(ctx, repo, prNum)
+	if err != nil {
+		return r.failTask(ctx, taskID, fmt.Errorf("loading PR: %w", err))
+	}
+	diff, err := r.gitProvider.GetPullRequestDiff(ctx, repo, prNum)
+	if err != nil {
+		return r.failTask(ctx, taskID, fmt.Errorf("loading PR diff: %w", err))
+	}
+	priorReviews, _ := r.gitProvider.ListPullRequestReviews(ctx, repo, prNum)
+
+	var issueForCtx *model.Issue
+	if iss, ierr := r.gitProvider.GetIssue(ctx, repo, t.IssueNumber); ierr == nil {
+		issueForCtx = iss
+	}
+
+	// Clone the PR head branch so the agent can read repo files for context.
+	logStep("workspace", fmt.Sprintf("Preparing workspace at %s", ws.RepoPath))
+	if err := ws.Prepare(); err != nil {
+		return r.failTask(ctx, taskID, fmt.Errorf("preparing workspace: %w", err))
+	}
+	headBranch := pr.Head
+	if headBranch == "" {
+		headBranch = proj.DefaultBranch
+	}
+	logStep("clone", fmt.Sprintf("Cloning %s (branch: %s)", proj.RepoURL, headBranch))
+	if err := r.cloneWithCredentials(ctx, repo, ws.RepoPath, headBranch); err != nil {
+		return r.failTask(ctx, taskID, fmt.Errorf("cloning repo: %w", err))
+	}
+
+	builder := prompt.NewBuilder()
+	r.loadProjectPromptTemplate(ctx, proj, builder)
+	systemPrompt := builder.BuildSystemPrompt()
+	taskPrompt := builder.BuildReviewPrompt(issueForCtx, pr, diff, priorReviews)
+
+	_, _ = r.client.PromptTemplateSnapshot.Create().
+		SetTask(t).SetSystemPrompt(systemPrompt).SetTaskPrompt(taskPrompt).
+		SetModelName(modelName).SetModelVersion(modelVersion).Save(ctx)
+
+	logStep("agent_start", fmt.Sprintf("Starting review agent (model=%s)", modelName))
+	handle, err := agentAdapter.StartSession(ctx, agentprovider.StartSessionRequest{
+		WorkDir: ws.RepoPath, SystemPrompt: systemPrompt, TaskPrompt: taskPrompt,
+	})
+	if err != nil {
+		return r.failTask(ctx, taskID, fmt.Errorf("starting agent: %w", err))
+	}
+	defer agentAdapter.Close(ctx, handle)
+
+	if r.OnHandleReady != nil {
+		r.OnHandleReady(agentAdapter, handle)
+	}
+
+	eventCh, err := agentAdapter.StreamEvents(ctx, handle)
+	if err != nil {
+		return r.failTask(ctx, taskID, fmt.Errorf("streaming events: %w", err))
+	}
+
+	var lastMessage strings.Builder
+	var deltaBuf strings.Builder
+	for event := range eventCh {
+		*sequence++
+		sanitized := sanitize.SanitizeMap(event.Payload)
+		payloadJSON, _ := json.Marshal(sanitized)
+		_, _ = r.client.SessionEvent.Create().
+			SetSession(sess).SetEventType(string(event.Type)).
+			SetPayloadJSON(string(payloadJSON)).SetSequence(*sequence).Save(ctx)
+
+		ssePayload := make(map[string]interface{}, len(sanitized)+1)
+		for k, v := range sanitized {
+			ssePayload[k] = v
+		}
+		ssePayload["_sequence"] = *sequence
+		r.broker.Publish(topic, sse.Event{Type: string(event.Type), Data: ssePayload})
+
+		if event.Type == model.AgentEventMessageDelta {
+			if c, ok := sanitized["content"].(string); ok {
+				deltaBuf.WriteString(c)
+			}
+		}
+		if event.Type == model.AgentEventMessageCompleted {
+			if c, ok := sanitized["content"].(string); ok && c != "" {
+				lastMessage.Reset()
+				lastMessage.WriteString(c)
+			} else if deltaBuf.Len() > 0 {
+				lastMessage.Reset()
+				lastMessage.WriteString(deltaBuf.String())
+			}
+			deltaBuf.Reset()
+		}
+		if event.Type == model.AgentEventTurnCompleted {
+			break
+		}
+	}
+	if lastMessage.Len() == 0 && deltaBuf.Len() > 0 {
+		lastMessage.WriteString(deltaBuf.String())
+	}
+
+	r.cleanupCredentials(ws.RepoPath)
+
+	now := time.Now()
+	_, _ = r.client.Session.UpdateOne(sess).SetStatus(session.StatusClosed).SetEndedAt(now).Save(ctx)
+
+	verdict, perr := extractReviewVerdict(lastMessage.String())
+	if perr != nil {
+		logStep("review_parse_failed", perr.Error())
+		verdict = &reviewVerdict{Decision: "comment", Summary: "Review agent produced no structured verdict; no actionable findings recorded."}
+	}
+	logStep("review_decision", fmt.Sprintf("decision=%s comments=%d", verdict.Decision, len(verdict.Comments)))
+
+	event := "COMMENT"
+	switch strings.ToLower(verdict.Decision) {
+	case "approve":
+		event = "APPROVE"
+	case "request_changes":
+		event = "REQUEST_CHANGES"
+	}
+
+	// GitHub rejects REQUEST_CHANGES / APPROVE with an empty body; ensure one.
+	body := verdict.Summary
+	if body == "" {
+		body = "ccmate auto-review"
+	}
+
+	if _, rerr := r.gitProvider.CreatePullRequestReview(ctx, repo, prNum, model.CreateReviewRequest{
+		Body: body, Event: event, Comments: verdict.Comments,
+	}); rerr != nil {
+		// If posting as a review fails (e.g. line out of diff), fall back to a plain issue comment so the feedback isn't lost.
+		logStep("review_post_failed", rerr.Error())
+		_ = r.gitProvider.CreateIssueComment(ctx, repo, prNum, fmt.Sprintf("ccmate review (fallback): %s\n\n%s", verdict.Decision, body))
+	} else {
+		logStep("review_posted", fmt.Sprintf("Posted %s review on PR #%d", event, prNum))
+	}
+
+	// If the agent wants changes, enqueue a review_fix task to address them.
+	if event == "REQUEST_CHANGES" {
+		r.enqueueReviewFix(ctx, t, proj, verdict, logStep)
+	}
+
+	if _, err := r.client.Task.UpdateOneID(taskID).SetStatus(enttask.StatusSucceeded).Save(ctx); err != nil {
+		return fmt.Errorf("marking review task succeeded: %w", err)
+	}
+	if r.OnStatusChange != nil {
+		r.OnStatusChange(ctx, taskID, string(model.TaskStatusRunning), string(model.TaskStatusSucceeded))
+	}
+	r.broker.Publish(topic, sse.Event{Type: "run.status", Data: map[string]interface{}{"task_id": taskID, "status": "succeeded"}})
+	return nil
+}
+
+// enqueueReviewFix creates a review_fix task that inherits the project's default
+// coding agent (not the review agent) so the fix is done by the implementer.
+func (r *Runner) enqueueReviewFix(ctx context.Context, reviewTask *ent.Task, proj *ent.Project, verdict *reviewVerdict, logStep func(string, string)) {
+	if reviewTask.PrNumber == nil {
+		return
+	}
+	prNum := *reviewTask.PrNumber
+
+	// Dedup: don't stack multiple active fix tasks for the same PR.
+	activeExists, _ := r.client.Task.Query().
+		Where(
+			enttask.HasProjectWith(project.ID(proj.ID)),
+			enttask.IssueNumber(reviewTask.IssueNumber),
+			enttask.TypeEQ(enttask.TypeReviewFix),
+			enttask.StatusIn(enttask.StatusQueued, enttask.StatusRunning, enttask.StatusPaused, enttask.StatusWaitingUser),
+		).Exist(ctx)
+	if activeExists {
+		logStep("review_fix_skipped", "active review_fix task already exists")
+		return
+	}
+
+	builder := r.client.Task.Create().
+		SetProject(proj).SetIssueNumber(reviewTask.IssueNumber).
+		SetNillablePrNumber(&prNum).
+		SetType(enttask.TypeReviewFix).SetStatus(enttask.StatusQueued).
+		SetReviewIteration(reviewTask.ReviewIteration).
+		SetTriggerSource(string(model.TriggerSourceWebhook))
+	if proj.DefaultAgentProfileID != nil {
+		builder = builder.SetAgentProfileID(*proj.DefaultAgentProfileID)
+	}
+	if _, err := builder.Save(ctx); err != nil {
+		logStep("review_fix_error", err.Error())
+		return
+	}
+	logStep("review_fix_enqueued", fmt.Sprintf("queued review_fix for PR #%d (iteration %d)", prNum, reviewTask.ReviewIteration))
+}
+
+// enqueueReviewIfEnabled is called after a PR has fresh code (created or pushed)
+// to start a new auto-review iteration. No-op if the project has no review agent
+// configured or the iteration cap has been reached.
+func (r *Runner) enqueueReviewIfEnabled(ctx context.Context, t *ent.Task, proj *ent.Project, logStep func(string, string)) {
+	if proj.ReviewAgentProfileID == nil {
+		return
+	}
+	if t.PrNumber == nil {
+		return
+	}
+	prNum := *t.PrNumber
+
+	maxIter := 3
+	if raw := r.settingsMgr.GetWithDefault(ctx, settings.KeyMaxReviewIterations, "3"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			maxIter = n
+		}
+	}
+
+	// Highest review_iteration observed across review/review_fix tasks on this issue.
+	prior, _ := r.client.Task.Query().
+		Where(
+			enttask.HasProjectWith(project.ID(proj.ID)),
+			enttask.IssueNumber(t.IssueNumber),
+			enttask.TypeIn(enttask.TypeReview, enttask.TypeReviewFix),
+		).
+		Order(ent.Desc(enttask.FieldReviewIteration)).
+		Limit(1).
+		All(ctx)
+
+	nextIter := 1
+	if len(prior) > 0 {
+		nextIter = prior[0].ReviewIteration + 1
+	}
+	if nextIter > maxIter {
+		logStep("review_cap_reached", fmt.Sprintf("max review iterations (%d) reached for PR #%d", maxIter, prNum))
+		_ = r.gitProvider.CreateIssueComment(ctx, repoFromProject(proj), prNum,
+			fmt.Sprintf("ccmate: reached max review iterations (%d); stopping auto-review loop.", maxIter))
+		return
+	}
+
+	// Dedup: skip if an active review task already exists for this PR.
+	activeExists, _ := r.client.Task.Query().
+		Where(
+			enttask.HasProjectWith(project.ID(proj.ID)),
+			enttask.IssueNumber(t.IssueNumber),
+			enttask.TypeEQ(enttask.TypeReview),
+			enttask.StatusIn(enttask.StatusQueued, enttask.StatusRunning, enttask.StatusPaused),
+		).Exist(ctx)
+	if activeExists {
+		return
+	}
+
+	builder := r.client.Task.Create().
+		SetProject(proj).SetIssueNumber(t.IssueNumber).
+		SetNillablePrNumber(&prNum).
+		SetType(enttask.TypeReview).SetStatus(enttask.StatusQueued).
+		SetReviewIteration(nextIter).
+		SetAgentProfileID(*proj.ReviewAgentProfileID).
+		SetTriggerSource(string(model.TriggerSourceWebhook))
+	if _, err := builder.Save(ctx); err != nil {
+		logStep("review_enqueue_error", err.Error())
+		return
+	}
+	logStep("review_enqueued", fmt.Sprintf("queued review task for PR #%d (iteration %d)", prNum, nextIter))
+}
+
+func repoFromProject(proj *ent.Project) model.RepoRef {
+	return parseRepoURL(proj.RepoURL)
+}

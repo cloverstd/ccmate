@@ -85,6 +85,11 @@ func DefaultAgentProfileID(v int) predicate.Project {
 	return predicate.Project(sql.FieldEQ(FieldDefaultAgentProfileID, v))
 }
 
+// ReviewAgentProfileID applies equality check predicate on the "review_agent_profile_id" field. It's identical to ReviewAgentProfileIDEQ.
+func ReviewAgentProfileID(v int) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldReviewAgentProfileID, v))
+}
+
 // DefaultPromptTemplateID applies equality check predicate on the "default_prompt_template_id" field. It's identical to DefaultPromptTemplateIDEQ.
 func DefaultPromptTemplateID(v int) predicate.Project {
 	return predicate.Project(sql.FieldEQ(FieldDefaultPromptTemplateID, v))
@@ -418,6 +423,56 @@ func DefaultAgentProfileIDIsNil() predicate.Project {
 // DefaultAgentProfileIDNotNil applies the NotNil predicate on the "default_agent_profile_id" field.
 func DefaultAgentProfileIDNotNil() predicate.Project {
 	return predicate.Project(sql.FieldNotNull(FieldDefaultAgentProfileID))
+}
+
+// ReviewAgentProfileIDEQ applies the EQ predicate on the "review_agent_profile_id" field.
+func ReviewAgentProfileIDEQ(v int) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldReviewAgentProfileID, v))
+}
+
+// ReviewAgentProfileIDNEQ applies the NEQ predicate on the "review_agent_profile_id" field.
+func ReviewAgentProfileIDNEQ(v int) predicate.Project {
+	return predicate.Project(sql.FieldNEQ(FieldReviewAgentProfileID, v))
+}
+
+// ReviewAgentProfileIDIn applies the In predicate on the "review_agent_profile_id" field.
+func ReviewAgentProfileIDIn(vs ...int) predicate.Project {
+	return predicate.Project(sql.FieldIn(FieldReviewAgentProfileID, vs...))
+}
+
+// ReviewAgentProfileIDNotIn applies the NotIn predicate on the "review_agent_profile_id" field.
+func ReviewAgentProfileIDNotIn(vs ...int) predicate.Project {
+	return predicate.Project(sql.FieldNotIn(FieldReviewAgentProfileID, vs...))
+}
+
+// ReviewAgentProfileIDGT applies the GT predicate on the "review_agent_profile_id" field.
+func ReviewAgentProfileIDGT(v int) predicate.Project {
+	return predicate.Project(sql.FieldGT(FieldReviewAgentProfileID, v))
+}
+
+// ReviewAgentProfileIDGTE applies the GTE predicate on the "review_agent_profile_id" field.
+func ReviewAgentProfileIDGTE(v int) predicate.Project {
+	return predicate.Project(sql.FieldGTE(FieldReviewAgentProfileID, v))
+}
+
+// ReviewAgentProfileIDLT applies the LT predicate on the "review_agent_profile_id" field.
+func ReviewAgentProfileIDLT(v int) predicate.Project {
+	return predicate.Project(sql.FieldLT(FieldReviewAgentProfileID, v))
+}
+
+// ReviewAgentProfileIDLTE applies the LTE predicate on the "review_agent_profile_id" field.
+func ReviewAgentProfileIDLTE(v int) predicate.Project {
+	return predicate.Project(sql.FieldLTE(FieldReviewAgentProfileID, v))
+}
+
+// ReviewAgentProfileIDIsNil applies the IsNil predicate on the "review_agent_profile_id" field.
+func ReviewAgentProfileIDIsNil() predicate.Project {
+	return predicate.Project(sql.FieldIsNull(FieldReviewAgentProfileID))
+}
+
+// ReviewAgentProfileIDNotNil applies the NotNil predicate on the "review_agent_profile_id" field.
+func ReviewAgentProfileIDNotNil() predicate.Project {
+	return predicate.Project(sql.FieldNotNull(FieldReviewAgentProfileID))
 }
 
 // DefaultPromptTemplateIDEQ applies the EQ predicate on the "default_prompt_template_id" field.
