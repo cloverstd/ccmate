@@ -9,6 +9,7 @@ import (
 
 	"github.com/cloverstd/ccmate/internal/ent"
 	enttask "github.com/cloverstd/ccmate/internal/ent/task"
+	"github.com/cloverstd/ccmate/internal/model"
 	"github.com/cloverstd/ccmate/internal/settings"
 )
 
@@ -137,7 +138,7 @@ func (m *Manager) buildEvent(ctx context.Context, taskID int, oldStatus, newStat
 		TaskType:    t.Type.String(),
 		CreatedAt:   t.CreatedAt,
 		UpdatedAt:   t.UpdatedAt,
-		BranchName:  fmt.Sprintf("ccmate/issue-%d-task-%d", t.IssueNumber, taskID),
+		BranchName:  model.TaskBranchName(t.IssueNumber, taskID),
 		BaseURL:     m.settingsMgr.GetWithDefault(ctx, keyBaseURL, ""),
 	}
 
