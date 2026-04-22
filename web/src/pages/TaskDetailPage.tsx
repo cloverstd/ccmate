@@ -67,22 +67,30 @@ export default function TaskDetailPage() {
     onSuccess: () => {
       setMessageInput(''); setThinking(true)
       setPendingMessages([])
-      queryClient.invalidateQueries({ queryKey: ['task', taskId] })
+      queryClient.invalidateQueries({ queryKey: ['task', taskId], exact: true })
     },
     onError: () => { setPendingMessages([]) },
   })
   const uploadMutation = useMutation({
     mutationFn: (file: File) => tasksApi.uploadAttachment(taskId, file),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId], exact: true }),
   })
   const completeMutation = useMutation({
     mutationFn: () => tasksApi.complete(taskId, { close_issue: true, merge_pr: completeAction === 'merge_pr' }),
-    onSuccess: (data) => { queryClient.invalidateQueries({ queryKey: ['task', taskId] }); setShowCompleteOptions(false); toast(data.actions.join(', '), 'success') },
+    onSuccess: (data) => {
+      // Complete closes the issue and optionally merges the PR — both sub-resources
+      // need a refresh, along with the core task status.
+      queryClient.invalidateQueries({ queryKey: ['task', taskId], exact: true })
+      queryClient.invalidateQueries({ queryKey: ['task', taskId, 'issue'] })
+      queryClient.invalidateQueries({ queryKey: ['task', taskId, 'pull-request'] })
+      setShowCompleteOptions(false)
+      toast(data.actions.join(', '), 'success')
+    },
   })
-  const pauseMutation = useMutation({ mutationFn: () => tasksApi.pause(taskId), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId] }) })
-  const resumeMutation = useMutation({ mutationFn: () => tasksApi.resume(taskId), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId] }) })
-  const retryMutation = useMutation({ mutationFn: () => tasksApi.retry(taskId), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId] }) })
-  const cancelMutation = useMutation({ mutationFn: () => tasksApi.cancel(taskId), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId] }) })
+  const pauseMutation = useMutation({ mutationFn: () => tasksApi.pause(taskId), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId], exact: true }) })
+  const resumeMutation = useMutation({ mutationFn: () => tasksApi.resume(taskId), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId], exact: true }) })
+  const retryMutation = useMutation({ mutationFn: () => tasksApi.retry(taskId), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId], exact: true }) })
+  const cancelMutation = useMutation({ mutationFn: () => tasksApi.cancel(taskId), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId], exact: true }) })
 
   useEffect(() => {
     if (!taskId) return

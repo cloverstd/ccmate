@@ -337,11 +337,19 @@ func (h *TaskHandler) GetIssue(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// Null is reserved for "no project/provider configured"; provider failures surface
+	// as 502 so the frontend can distinguish empty state from transient errors.
 	var issue *model.Issue
 	if t.Edges.Project != nil {
 		repo := parseRepoURLFromString(t.Edges.Project.RepoURL)
 		if gp := h.gitProv(); gp != nil && repo.Owner != "" {
-			issue, _ = gp.GetIssue(r.Context(), repo, t.IssueNumber)
+			var err error
+			issue, err = gp.GetIssue(r.Context(), repo, t.IssueNumber)
+			if err != nil {
+				slog.Warn("failed to fetch task issue", "task_id", t.ID, "issue_number", t.IssueNumber, "error", err)
+				http.Error(w, `{"error":"failed to fetch issue from git provider"}`, http.StatusBadGateway)
+				return
+			}
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"issue": issue})
@@ -353,14 +361,23 @@ func (h *TaskHandler) GetPullRequest(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// Distinguish three cases: no PR exists (null), provider not configured (still build
+	// a minimal stub from task.pr_number if present), provider failed (502).
 	var pr *model.PullRequest
 	if t.Edges.Project != nil {
 		repo := parseRepoURLFromString(t.Edges.Project.RepoURL)
 		gp := h.gitProv()
 		if gp != nil && repo.Owner != "" {
 			if t.PrNumber != nil && *t.PrNumber > 0 {
-				pr, _ = gp.GetPullRequest(r.Context(), repo, *t.PrNumber)
-				if pr == nil {
+				fetched, err := gp.GetPullRequest(r.Context(), repo, *t.PrNumber)
+				if err != nil {
+					slog.Warn("failed to fetch task pull request", "task_id", t.ID, "pr_number", *t.PrNumber, "error", err)
+					http.Error(w, `{"error":"failed to fetch pull request from git provider"}`, http.StatusBadGateway)
+					return
+				}
+				if fetched != nil {
+					pr = fetched
+				} else {
 					pr = &model.PullRequest{
 						Number:  *t.PrNumber,
 						HTMLURL: fmt.Sprintf("%s/pull/%d", t.Edges.Project.RepoURL, *t.PrNumber),
@@ -372,7 +389,13 @@ func (h *TaskHandler) GetPullRequest(w http.ResponseWriter, r *http.Request) {
 				basePath := h.settingsMgr.GetWithDefault(r.Context(), settings.KeyStorageBasePath, "data")
 				ws := runner.NewWorkspace(filepath.Join(basePath, "workspaces"), t.Edges.Project.ID, t.ID)
 				branchName := ws.BranchName(t.IssueNumber)
-				pr, _ = gp.FindPullRequestByHead(r.Context(), repo, branchName)
+				found, err := gp.FindPullRequestByHead(r.Context(), repo, branchName)
+				if err != nil {
+					slog.Warn("failed to find PR by head", "task_id", t.ID, "branch", branchName, "error", err)
+					http.Error(w, `{"error":"failed to locate pull request from git provider"}`, http.StatusBadGateway)
+					return
+				}
+				pr = found
 			}
 		} else if t.PrNumber != nil && *t.PrNumber > 0 {
 			pr = &model.PullRequest{
