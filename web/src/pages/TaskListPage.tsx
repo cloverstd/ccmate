@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { useState } from 'react'
-import { tasksApi, projectsApi } from '../lib/api'
+import { useState, useEffect } from 'react'
+import { tasksApi, projectsApi, subscribeToTasksEvents } from '../lib/api'
 import StatusBadge from '../components/StatusBadge'
 import { Btn, Input, Select, Label, TermCard, Tag } from '../components/ui'
 import Icon from '../components/Icon'
@@ -29,6 +29,15 @@ export default function TaskListPage() {
     queryFn: () => tasksApi.list(statusFilter ? { status: statusFilter } : undefined),
   })
   const { data: projects } = useQuery({ queryKey: ['projects'], queryFn: projectsApi.list })
+
+  useEffect(() => {
+    const unsub = subscribeToTasksEvents((event) => {
+      if (event.type === 'task.status' || event.type === 'task.completed' || event.type === 'task.failed' || event.type === 'task.created') {
+        queryClient.invalidateQueries({ queryKey: ['tasks'] })
+      }
+    })
+    return unsub
+  }, [queryClient])
 
   const createMutation = useMutation({
     mutationFn: () => tasksApi.create(newTask),

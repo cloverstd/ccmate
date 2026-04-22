@@ -464,7 +464,16 @@ func (h *TaskHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 3. Mark task as succeeded
-	_, _ = h.client.Task.UpdateOneID(id).SetStatus(enttask.StatusSucceeded).Save(ctx)
+	prevStatus := string(t.Status)
+	if _, err := h.client.Task.UpdateOneID(id).SetStatus(enttask.StatusSucceeded).Save(ctx); err == nil {
+		payload := map[string]interface{}{
+			"task_id": id,
+			"from":    prevStatus,
+			"to":      string(enttask.StatusSucceeded),
+		}
+		h.broker.Publish(fmt.Sprintf("task:%d", id), sse.Event{Type: "task.status", Data: payload})
+		h.broker.Publish("tasks", sse.Event{Type: "task.status", Data: payload})
+	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status":  "completed",
