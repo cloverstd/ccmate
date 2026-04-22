@@ -857,6 +857,7 @@ func (r *Runner) runReviewTask(
 
 	var lastMessage strings.Builder
 	var deltaBuf strings.Builder
+	var agentErrors []string
 	for event := range eventCh {
 		*sequence++
 		sanitized := sanitize.SanitizeMap(event.Payload)
@@ -887,6 +888,12 @@ func (r *Runner) runReviewTask(
 			}
 			deltaBuf.Reset()
 		}
+		if event.Type == model.AgentEventError {
+			if msg, ok := sanitized["message"].(string); ok && msg != "" {
+				agentErrors = append(agentErrors, msg)
+				logStep("agent_error", msg)
+			}
+		}
 		if event.Type == model.AgentEventTurnCompleted {
 			break
 		}
@@ -896,6 +903,10 @@ func (r *Runner) runReviewTask(
 	}
 
 	r.cleanupCredentials(ws.RepoPath)
+
+	if len(agentErrors) > 0 {
+		return r.failTask(ctx, taskID, fmt.Errorf("agent error: %s", strings.Join(agentErrors, "; ")))
+	}
 
 	now := time.Now()
 	_, _ = r.client.Session.UpdateOne(sess).SetStatus(session.StatusClosed).SetEndedAt(now).Save(ctx)
@@ -921,12 +932,29 @@ func (r *Runner) runReviewTask(
 		body = "ccmate auto-review"
 	}
 
+	// If line-level posting fails (e.g. a comment points outside the diff),
+	// fall back to a review body with findings inlined so review_fix can still
+	// read them from prior reviews.
+	fallbackBody := body
+	if len(verdict.Comments) > 0 {
+		var sb strings.Builder
+		sb.WriteString(body)
+		sb.WriteString("\n\nLine-level findings:\n")
+		for _, c := range verdict.Comments {
+			sb.WriteString(fmt.Sprintf("- `%s:%d`: %s\n", c.Path, c.Line, c.Body))
+		}
+		fallbackBody = sb.String()
+	}
+
 	if _, rerr := r.gitProvider.CreatePullRequestReview(ctx, repo, prNum, model.CreateReviewRequest{
 		Body: body, Event: event, Comments: verdict.Comments,
 	}); rerr != nil {
-		// If posting as a review fails (e.g. line out of diff), fall back to a plain issue comment so the feedback isn't lost.
 		logStep("review_post_failed", rerr.Error())
-		_ = r.gitProvider.CreateIssueComment(ctx, repo, prNum, fmt.Sprintf("ccmate review (fallback): %s\n\n%s", verdict.Decision, body))
+		if _, retryErr := r.gitProvider.CreatePullRequestReview(ctx, repo, prNum, model.CreateReviewRequest{
+			Body: fallbackBody, Event: event,
+		}); retryErr != nil {
+			_ = r.gitProvider.CreateIssueComment(ctx, repo, prNum, fmt.Sprintf("ccmate review (fallback): %s\n\n%s", verdict.Decision, fallbackBody))
+		}
 	} else {
 		logStep("review_posted", fmt.Sprintf("Posted %s review on PR #%d", event, prNum))
 	}
@@ -1003,7 +1031,7 @@ func (r *Runner) enqueueReviewIfEnabled(ctx context.Context, t *ent.Task, proj *
 	}
 
 	// Highest review_iteration observed across review/review_fix tasks on this issue.
-	prior, _ := r.client.Task.Query().
+	prior, err := r.client.Task.Query().
 		Where(
 			enttask.HasProjectWith(project.ID(proj.ID)),
 			enttask.IssueNumber(t.IssueNumber),
@@ -1012,6 +1040,10 @@ func (r *Runner) enqueueReviewIfEnabled(ctx context.Context, t *ent.Task, proj *
 		Order(ent.Desc(enttask.FieldReviewIteration)).
 		Limit(1).
 		All(ctx)
+	if err != nil {
+		logStep("review_iteration_lookup_error", err.Error())
+		return
+	}
 
 	nextIter := 1
 	if len(prior) > 0 {
@@ -1025,13 +1057,17 @@ func (r *Runner) enqueueReviewIfEnabled(ctx context.Context, t *ent.Task, proj *
 	}
 
 	// Dedup: skip if an active review task already exists for this PR.
-	activeExists, _ := r.client.Task.Query().
+	activeExists, err := r.client.Task.Query().
 		Where(
 			enttask.HasProjectWith(project.ID(proj.ID)),
 			enttask.IssueNumber(t.IssueNumber),
 			enttask.TypeEQ(enttask.TypeReview),
 			enttask.StatusIn(enttask.StatusQueued, enttask.StatusRunning, enttask.StatusPaused),
 		).Exist(ctx)
+	if err != nil {
+		logStep("review_dedup_error", err.Error())
+		return
+	}
 	if activeExists {
 		return
 	}

@@ -224,13 +224,16 @@ func (p *Processor) handlePRSynchronize(ctx context.Context, event *model.Normal
 	}
 
 	// Dedup: skip if an active review task already exists for this PR.
-	activeExists, _ := p.client.Task.Query().
+	activeExists, err := p.client.Task.Query().
 		Where(
 			enttask.HasProjectWith(project.ID(proj.ID)),
 			enttask.IssueNumber(linkedTask.IssueNumber),
 			enttask.TypeEQ(enttask.TypeReview),
 			enttask.StatusIn(enttask.StatusQueued, enttask.StatusRunning, enttask.StatusPaused),
 		).Exist(ctx)
+	if err != nil {
+		return fmt.Errorf("checking active review task: %w", err)
+	}
 	if activeExists {
 		return nil
 	}
@@ -244,7 +247,7 @@ func (p *Processor) handlePRSynchronize(ctx context.Context, event *model.Normal
 			}
 		}
 	}
-	prior, _ := p.client.Task.Query().
+	prior, err := p.client.Task.Query().
 		Where(
 			enttask.HasProjectWith(project.ID(proj.ID)),
 			enttask.IssueNumber(linkedTask.IssueNumber),
@@ -253,6 +256,9 @@ func (p *Processor) handlePRSynchronize(ctx context.Context, event *model.Normal
 		Order(ent.Desc(enttask.FieldReviewIteration)).
 		Limit(1).
 		All(ctx)
+	if err != nil {
+		return fmt.Errorf("finding prior review iterations: %w", err)
+	}
 	nextIter := 1
 	if len(prior) > 0 {
 		nextIter = prior[0].ReviewIteration + 1

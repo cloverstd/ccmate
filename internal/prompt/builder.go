@@ -161,15 +161,41 @@ func (b *Builder) BuildReviewPrompt(issue *model.Issue, pr *model.PullRequest, d
 			sb.WriteString("\n")
 		}
 	}
+	// Use a fence longer than any backtick run inside the diff so untrusted
+	// content cannot prematurely close the block and escape UNTRUSTED_CONTEXT.
+	fence := longestBacktickFence(diff)
 	sb.WriteString("\nUnified diff:\n")
-	sb.WriteString("```diff\n")
+	sb.WriteString(fence)
+	sb.WriteString("diff\n")
 	sb.WriteString(diff)
 	if !strings.HasSuffix(diff, "\n") {
 		sb.WriteString("\n")
 	}
-	sb.WriteString("```\n")
+	sb.WriteString(fence)
+	sb.WriteString("\n")
 	sb.WriteString("</UNTRUSTED_CONTEXT>\n")
 	return sb.String()
+}
+
+// longestBacktickFence returns a run of backticks at least one longer than the
+// longest consecutive run of backticks in s (minimum 3, per CommonMark).
+func longestBacktickFence(s string) string {
+	longest, run := 0, 0
+	for _, r := range s {
+		if r == '`' {
+			run++
+			if run > longest {
+				longest = run
+			}
+		} else {
+			run = 0
+		}
+	}
+	n := longest + 1
+	if n < 3 {
+		n = 3
+	}
+	return strings.Repeat("`", n)
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }

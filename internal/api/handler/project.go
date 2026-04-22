@@ -93,7 +93,11 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.ReviewAgentProfileID != nil {
 		if _, err := h.client.AgentProfile.Get(r.Context(), *req.ReviewAgentProfileID); err != nil {
-			http.Error(w, `{"error":"review agent profile not found"}`, http.StatusBadRequest)
+			if ent.IsNotFound(err) {
+				http.Error(w, `{"error":"review agent profile not found"}`, http.StatusBadRequest)
+				return
+			}
+			http.Error(w, `{"error":"failed to validate review agent profile"}`, http.StatusInternalServerError)
 			return
 		}
 		builder = builder.SetReviewAgentProfileID(*req.ReviewAgentProfileID)
@@ -153,7 +157,11 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.ReviewAgentProfileID != nil {
 		if _, err := h.client.AgentProfile.Get(r.Context(), *req.ReviewAgentProfileID); err != nil {
-			http.Error(w, `{"error":"review agent profile not found"}`, http.StatusBadRequest)
+			if ent.IsNotFound(err) {
+				http.Error(w, `{"error":"review agent profile not found"}`, http.StatusBadRequest)
+				return
+			}
+			http.Error(w, `{"error":"failed to validate review agent profile"}`, http.StatusInternalServerError)
 			return
 		}
 		builder = builder.SetReviewAgentProfileID(*req.ReviewAgentProfileID)
