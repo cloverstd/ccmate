@@ -505,19 +505,26 @@ func (p *Provider) ListAccessibleRepos(ctx context.Context) ([]model.RepoInfo, e
 		ListOptions: gh.ListOptions{PerPage: 100},
 	}
 
-	repos, _, err := p.client.Repositories.List(ctx, "", opts)
-	if err != nil {
-		return nil, fmt.Errorf("listing repos: %w", err)
-	}
-
-	for _, repo := range repos {
-		allRepos = append(allRepos, model.RepoInfo{
-			FullName:      repo.GetFullName(),
-			HTMLURL:       repo.GetHTMLURL(),
-			DefaultBranch: repo.GetDefaultBranch(),
-			Description:   repo.GetDescription(),
-			Private:       repo.GetPrivate(),
-		})
+	// Paginate — /user/repos returns at most 100 per page, and accounts with
+	// many org/collaborator repos otherwise get silently truncated.
+	for {
+		repos, resp, err := p.client.Repositories.List(ctx, "", opts)
+		if err != nil {
+			return nil, fmt.Errorf("listing repos: %w", err)
+		}
+		for _, repo := range repos {
+			allRepos = append(allRepos, model.RepoInfo{
+				FullName:      repo.GetFullName(),
+				HTMLURL:       repo.GetHTMLURL(),
+				DefaultBranch: repo.GetDefaultBranch(),
+				Description:   repo.GetDescription(),
+				Private:       repo.GetPrivate(),
+			})
+		}
+		if resp == nil || resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
 	}
 	return allRepos, nil
 }
