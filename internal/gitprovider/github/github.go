@@ -441,6 +441,24 @@ func (p *Provider) CreatePullRequestReview(ctx context.Context, repo model.RepoR
 	return &model.Review{ID: r.GetID(), State: r.GetState(), Body: r.GetBody(), User: r.GetUser().GetLogin()}, nil
 }
 
+// AddIssueReaction adds an emoji reaction to an issue or PR (PRs share the issue reaction endpoint).
+// content values: "+1", "-1", "laugh", "confused", "heart", "hooray", "rocket", "eyes".
+func (p *Provider) AddIssueReaction(ctx context.Context, repo model.RepoRef, number int, content string) (int64, error) {
+	r, _, err := p.client.Reactions.CreateIssueReaction(ctx, repo.Owner, repo.Name, number, content)
+	if err != nil {
+		return 0, fmt.Errorf("creating reaction: %w", err)
+	}
+	return r.GetID(), nil
+}
+
+func (p *Provider) RemoveIssueReaction(ctx context.Context, repo model.RepoRef, number int, reactionID int64) error {
+	_, err := p.client.Reactions.DeleteIssueReaction(ctx, repo.Owner, repo.Name, number, reactionID)
+	if err != nil {
+		return fmt.Errorf("deleting reaction: %w", err)
+	}
+	return nil
+}
+
 func (p *Provider) GetPullRequestDiff(ctx context.Context, repo model.RepoRef, prNumber int) (string, error) {
 	diff, _, err := p.client.PullRequests.GetRaw(ctx, repo.Owner, repo.Name, prNumber, gh.RawOptions{Type: gh.Diff})
 	if err != nil {

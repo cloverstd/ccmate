@@ -777,6 +777,28 @@ func (r *Runner) runReviewTask(
 
 	logStep("init", fmt.Sprintf("Review task #%d for PR #%d (iteration %d)", taskID, prNum, t.ReviewIteration))
 
+	// Mark the PR with 👀 so reviewers can see ccmate is actively reviewing.
+	var eyesReactionID int64
+	if rid, rerr := r.gitProvider.AddIssueReaction(ctx, repo, prNum, "eyes"); rerr == nil {
+		eyesReactionID = rid
+		logStep("reaction_added", fmt.Sprintf("added 👀 reaction (id=%d)", rid))
+	} else {
+		logStep("reaction_failed", rerr.Error())
+	}
+	defer func() {
+		if eyesReactionID == 0 {
+			return
+		}
+		// Use a fresh context in case the parent was cancelled.
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if derr := r.gitProvider.RemoveIssueReaction(cleanupCtx, repo, prNum, eyesReactionID); derr != nil {
+			logStep("reaction_cleanup_failed", derr.Error())
+		} else {
+			logStep("reaction_removed", "removed 👀 reaction")
+		}
+	}()
+
 	pr, err := r.gitProvider.GetPullRequest(ctx, repo, prNum)
 	if err != nil {
 		return r.failTask(ctx, taskID, fmt.Errorf("loading PR: %w", err))
