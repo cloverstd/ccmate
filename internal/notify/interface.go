@@ -2,6 +2,7 @@ package notify
 
 import (
 	"context"
+	"strconv"
 	"time"
 )
 
@@ -29,7 +30,7 @@ func (e NotifyEvent) PRURL() string {
 	if e.RepoURL == "" || e.PRNumber == 0 {
 		return ""
 	}
-	return e.RepoURL + "/pull/" + itoa(e.PRNumber)
+	return e.RepoURL + "/pull/" + strconv.Itoa(e.PRNumber)
 }
 
 // TaskURL returns the ccmate UI link for this task.
@@ -37,7 +38,7 @@ func (e NotifyEvent) TaskURL() string {
 	if e.BaseURL == "" {
 		return ""
 	}
-	return e.BaseURL + "/tasks/" + itoa(e.TaskID)
+	return e.BaseURL + "/tasks/" + strconv.Itoa(e.TaskID)
 }
 
 // IssueURL returns the GitHub issue link.
@@ -45,19 +46,7 @@ func (e NotifyEvent) IssueURL() string {
 	if e.RepoURL == "" || e.IssueNumber == 0 {
 		return ""
 	}
-	return e.RepoURL + "/issues/" + itoa(e.IssueNumber)
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	s := ""
-	for n > 0 {
-		s = string(rune('0'+n%10)) + s
-		n /= 10
-	}
-	return s
+	return e.RepoURL + "/issues/" + strconv.Itoa(e.IssueNumber)
 }
 
 // Notifier is the interface that notification providers must implement.

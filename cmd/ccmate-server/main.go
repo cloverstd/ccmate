@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -148,10 +149,18 @@ func main() {
 	}
 
 	schedCtx, schedCancel := context.WithCancel(ctx)
-	go sched.Run(schedCtx)
-	go scheduler.RunCleanup(schedCtx, client, settingsMgr)
-	go scheduler.RunIssueScanner(schedCtx, client, settingsMgr, gitProvMgr)
-	go tgProvider.RunPoller(schedCtx, scheduler.NewTelegramDispatcher(sched))
+	var bgWG sync.WaitGroup
+	spawn := func(fn func()) {
+		bgWG.Add(1)
+		go func() {
+			defer bgWG.Done()
+			fn()
+		}()
+	}
+	spawn(func() { sched.Run(schedCtx) })
+	spawn(func() { scheduler.RunCleanup(schedCtx, client, settingsMgr) })
+	spawn(func() { scheduler.RunIssueScanner(schedCtx, client, settingsMgr, gitProvMgr) })
+	spawn(func() { tgProvider.RunPoller(schedCtx, scheduler.NewTelegramDispatcher(sched)) })
 
 	go func() {
 		slog.Info("starting server", "addr", cfg.Server.Addr())
@@ -191,6 +200,20 @@ func main() {
 		}
 	} else {
 		slog.Info("no running agents, shutting down immediately", "signal", sig.String())
+	}
+
+	// Wait for background goroutines (scheduler loop, cleanup, scanner,
+	// telegram poller) so the telegram poller can persist its last update_id
+	// before the process exits.
+	bgDone := make(chan struct{})
+	go func() {
+		bgWG.Wait()
+		close(bgDone)
+	}()
+	select {
+	case <-bgDone:
+	case <-time.After(5 * time.Second):
+		slog.Warn("timeout waiting for background goroutines to stop")
 	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(ctx, 5*time.Second)

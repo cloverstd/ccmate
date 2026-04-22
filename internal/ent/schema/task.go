@@ -26,7 +26,7 @@ func (Task) Fields() []ent.Field {
 		field.Int("priority").Default(0),
 		field.String("trigger_source").Default("webhook"),
 		field.Int("current_session_id").Optional().Nillable(),
-		field.String("telegram_chat_id").Optional(),
+		field.String("telegram_chat_id").Optional().Nillable().Sensitive(),
 		field.Int64("telegram_message_id").Optional().Nillable(),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
@@ -48,5 +48,6 @@ func (Task) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("status"),
 		index.Fields("issue_number"),
+		index.Fields("telegram_chat_id", "telegram_message_id"),
 	}
 }

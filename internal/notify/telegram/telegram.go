@@ -6,15 +6,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cloverstd/ccmate/internal/ent"
 	enttask "github.com/cloverstd/ccmate/internal/ent/task"
+	"github.com/cloverstd/ccmate/internal/model"
 	"github.com/cloverstd/ccmate/internal/notify"
 	"github.com/cloverstd/ccmate/internal/settings"
 )
+
+// maxErrorRunes bounds error excerpts shown in Telegram messages.
+const maxErrorRunes = 300
+
+// botTokenPattern matches Telegram bot tokens (id:secret) for sanitization.
+var botTokenPattern = regexp.MustCompile(`\d+:[A-Za-z0-9_\-]+`)
 
 const (
 	KeyEnabled        = "notify_telegram_enabled"
@@ -75,12 +83,11 @@ func (p *Provider) Send(ctx context.Context, event notify.NotifyEvent) error {
 	}
 
 	// If we already have a message for this task in the same chat, edit it.
-	if t.TelegramMessageID != nil && t.TelegramChatID == chatID {
+	if t.TelegramMessageID != nil && t.TelegramChatID != nil && *t.TelegramChatID == chatID {
 		if err := p.editMessage(ctx, botToken, chatID, *t.TelegramMessageID, text, keyboard); err == nil {
 			return nil
-		} else {
-			// Fall through to a fresh send if editing fails (message deleted, etc.).
 		}
+		// Fall through to a fresh send if editing fails (message deleted, etc.).
 	}
 
 	msgID, err := p.sendMessage(ctx, botToken, chatID, text, keyboard)
@@ -143,11 +150,7 @@ func formatMessage(e notify.NotifyEvent) string {
 	}
 
 	if e.Error != "" {
-		err := e.Error
-		if len(err) > 300 {
-			err = err[:300] + "…"
-		}
-		sb.WriteString(fmt.Sprintf("\n❗ Error:\n```\n%s\n```\n", err))
+		sb.WriteString(fmt.Sprintf("\n❗ Error:\n```\n%s\n```\n", escapeMarkdownCode(truncateRunes(e.Error, maxErrorRunes))))
 	}
 
 	if url := e.TaskURL(); url != "" {
@@ -232,6 +235,32 @@ func statusIcon(status string) string {
 	default:
 		return "📋"
 	}
+}
+
+// truncateRunes safely truncates s to at most max runes (UTF-8 safe).
+func truncateRunes(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max]) + "…"
+}
+
+// escapeMarkdownCode escapes characters that would break a MarkdownV2 code block.
+func escapeMarkdownCode(s string) string {
+	return strings.NewReplacer("\\", "\\\\", "`", "\\`").Replace(s)
+}
+
+// sanitizeError redacts the bot token (and any token-like substring) from an error message.
+func sanitizeError(err error, botToken string) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	if botToken != "" {
+		msg = strings.ReplaceAll(msg, botToken, "[REDACTED]")
+	}
+	return botTokenPattern.ReplaceAllString(msg, "[REDACTED]")
 }
 
 // escapeMarkdown escapes MarkdownV2 special characters.
@@ -333,7 +362,7 @@ func (p *Provider) callAPI(ctx context.Context, botToken, method string, body in
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("telegram %s: %w", method, err)
+		return fmt.Errorf("telegram %s: %s", method, sanitizeError(err, botToken))
 	}
 	defer resp.Body.Close()
 	if out != nil {
@@ -398,7 +427,11 @@ func (p *Provider) RunPoller(ctx context.Context, dispatcher CallbackDispatcher)
 			if u.CallbackQuery != nil {
 				p.handleCallback(ctx, botToken, u.CallbackQuery, dispatcher)
 			}
-			_ = p.settingsMgr.Set(ctx, KeyLastUpdateID, strconv.FormatInt(u.UpdateID, 10))
+			// Persist offset on a fresh context so a shutdown-initiated cancel
+			// doesn't drop the last handled update_id.
+			persistCtx, persistCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			_ = p.settingsMgr.Set(persistCtx, KeyLastUpdateID, strconv.FormatInt(u.UpdateID, 10))
+			persistCancel()
 		}
 	}
 }
@@ -453,11 +486,10 @@ func (p *Provider) handleCallback(ctx context.Context, botToken string, q *tgCal
 
 	// Restrict to the configured chat ID to avoid hostile invocations.
 	configuredChat, _ := p.settingsMgr.Get(ctx, KeyChatID)
-	if q.Message != nil && configuredChat != "" {
-		if strconv.FormatInt(q.Message.Chat.ID, 10) != configuredChat && configuredChat != "" {
-			p.answerCallback(ctx, botToken, q.ID, "unauthorized chat", true)
-			return
-		}
+	if configuredChat == "" || q.Message == nil ||
+		strconv.FormatInt(q.Message.Chat.ID, 10) != configuredChat {
+		p.answerCallback(ctx, botToken, q.ID, "unauthorized chat", true)
+		return
 	}
 
 	msg := "ok"
@@ -480,7 +512,7 @@ func (p *Provider) handleCallback(ctx context.Context, botToken string, q *tgCal
 				TaskType:    t.Type.String(),
 				CreatedAt:   t.CreatedAt,
 				UpdatedAt:   t.UpdatedAt,
-				BranchName:  fmt.Sprintf("ccmate/issue-%d-task-%d", t.IssueNumber, taskID),
+				BranchName:  model.TaskBranchName(t.IssueNumber, taskID),
 				BaseURL:     p.settingsMgr.GetWithDefault(ctx, "notify_base_url", ""),
 			}
 			if t.PrNumber != nil {

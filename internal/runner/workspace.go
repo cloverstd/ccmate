@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/cloverstd/ccmate/internal/model"
 )
 
 // Workspace manages the working directory for a task.
@@ -34,7 +36,7 @@ func (w *Workspace) Prepare() error {
 
 // BranchName returns the standard branch name for this task.
 func (w *Workspace) BranchName(issueNumber int) string {
-	return fmt.Sprintf("ccmate/issue-%d-task-%d", issueNumber, w.TaskID)
+	return model.TaskBranchName(issueNumber, w.TaskID)
 }
 
 // GitInit initializes git in the workspace (for cases where we don't clone).

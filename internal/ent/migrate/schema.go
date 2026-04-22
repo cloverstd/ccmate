@@ -339,6 +339,11 @@ var (
 				Unique:  false,
 				Columns: []*schema.Column{TasksColumns[1]},
 			},
+			{
+				Name:    "task_telegram_chat_id_telegram_message_id",
+				Unique:  false,
+				Columns: []*schema.Column{TasksColumns[9], TasksColumns[10]},
+			},
 		},
 	}
 	// WebhookReceiptsColumns holds the columns for the "webhook_receipts" table.

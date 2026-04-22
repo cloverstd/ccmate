@@ -37,7 +37,7 @@ type Task struct {
 	// CurrentSessionID holds the value of the "current_session_id" field.
 	CurrentSessionID *int `json:"current_session_id,omitempty"`
 	// TelegramChatID holds the value of the "telegram_chat_id" field.
-	TelegramChatID string `json:"telegram_chat_id,omitempty"`
+	TelegramChatID *string `json:"-"`
 	// TelegramMessageID holds the value of the "telegram_message_id" field.
 	TelegramMessageID *int64 `json:"telegram_message_id,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
@@ -219,7 +219,8 @@ func (_m *Task) assignValues(columns []string, values []any) error {
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field telegram_chat_id", values[i])
 			} else if value.Valid {
-				_m.TelegramChatID = value.String
+				_m.TelegramChatID = new(string)
+				*_m.TelegramChatID = value.String
 			}
 		case task.FieldTelegramMessageID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -343,8 +344,7 @@ func (_m *Task) String() string {
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
-	builder.WriteString("telegram_chat_id=")
-	builder.WriteString(_m.TelegramChatID)
+	builder.WriteString("telegram_chat_id=<sensitive>")
 	builder.WriteString(", ")
 	if v := _m.TelegramMessageID; v != nil {
 		builder.WriteString("telegram_message_id=")

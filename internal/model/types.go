@@ -1,9 +1,16 @@
 package model
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 )
+
+// TaskBranchName is the canonical branch name for a task. It must stay in sync
+// with runner.Workspace.BranchName.
+func TaskBranchName(issueNumber, taskID int) string {
+	return fmt.Sprintf("ccmate/issue-%d-task-%d", issueNumber, taskID)
+}
 
 // TaskType represents the type of a task.
 type TaskType string

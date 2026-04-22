@@ -425,7 +425,7 @@ func (_c *TaskCreate) createSpec() (*Task, *sqlgraph.CreateSpec) {
 	}
 	if value, ok := _c.mutation.TelegramChatID(); ok {
 		_spec.SetField(task.FieldTelegramChatID, field.TypeString, value)
-		_node.TelegramChatID = value
+		_node.TelegramChatID = &value
 	}
 	if value, ok := _c.mutation.TelegramMessageID(); ok {
 		_spec.SetField(task.FieldTelegramMessageID, field.TypeInt64, value)
