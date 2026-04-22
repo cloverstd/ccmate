@@ -90,6 +90,20 @@ func (_c *ProjectCreate) SetNillableDefaultAgentProfileID(v *int) *ProjectCreate
 	return _c
 }
 
+// SetReviewAgentProfileID sets the "review_agent_profile_id" field.
+func (_c *ProjectCreate) SetReviewAgentProfileID(v int) *ProjectCreate {
+	_c.mutation.SetReviewAgentProfileID(v)
+	return _c
+}
+
+// SetNillableReviewAgentProfileID sets the "review_agent_profile_id" field if the given value is not nil.
+func (_c *ProjectCreate) SetNillableReviewAgentProfileID(v *int) *ProjectCreate {
+	if v != nil {
+		_c.SetReviewAgentProfileID(*v)
+	}
+	return _c
+}
+
 // SetDefaultPromptTemplateID sets the "default_prompt_template_id" field.
 func (_c *ProjectCreate) SetDefaultPromptTemplateID(v int) *ProjectCreate {
 	_c.mutation.SetDefaultPromptTemplateID(v)
@@ -327,6 +341,10 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.DefaultAgentProfileID(); ok {
 		_spec.SetField(project.FieldDefaultAgentProfileID, field.TypeInt, value)
 		_node.DefaultAgentProfileID = &value
+	}
+	if value, ok := _c.mutation.ReviewAgentProfileID(); ok {
+		_spec.SetField(project.FieldReviewAgentProfileID, field.TypeInt, value)
+		_node.ReviewAgentProfileID = &value
 	}
 	if value, ok := _c.mutation.DefaultPromptTemplateID(); ok {
 		_spec.SetField(project.FieldDefaultPromptTemplateID, field.TypeInt, value)

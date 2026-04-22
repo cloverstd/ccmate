@@ -28,6 +28,8 @@ type Task struct {
 	AgentProfileID *int `json:"agent_profile_id,omitempty"`
 	// Type holds the value of the "type" field.
 	Type task.Type `json:"type,omitempty"`
+	// ReviewIteration holds the value of the "review_iteration" field.
+	ReviewIteration int `json:"review_iteration,omitempty"`
 	// Status holds the value of the "status" field.
 	Status task.Status `json:"status,omitempty"`
 	// Priority holds the value of the "priority" field.
@@ -135,7 +137,7 @@ func (*Task) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case task.FieldID, task.FieldIssueNumber, task.FieldPrNumber, task.FieldAgentProfileID, task.FieldPriority, task.FieldCurrentSessionID, task.FieldTelegramMessageID:
+		case task.FieldID, task.FieldIssueNumber, task.FieldPrNumber, task.FieldAgentProfileID, task.FieldReviewIteration, task.FieldPriority, task.FieldCurrentSessionID, task.FieldTelegramMessageID:
 			values[i] = new(sql.NullInt64)
 		case task.FieldType, task.FieldStatus, task.FieldTriggerSource, task.FieldTelegramChatID:
 			values[i] = new(sql.NullString)
@@ -189,6 +191,12 @@ func (_m *Task) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field type", values[i])
 			} else if value.Valid {
 				_m.Type = task.Type(value.String)
+			}
+		case task.FieldReviewIteration:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field review_iteration", values[i])
+			} else if value.Valid {
+				_m.ReviewIteration = int(value.Int64)
 			}
 		case task.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -329,6 +337,9 @@ func (_m *Task) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("type=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Type))
+	builder.WriteString(", ")
+	builder.WriteString("review_iteration=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ReviewIteration))
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Status))

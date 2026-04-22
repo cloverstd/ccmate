@@ -123,6 +123,27 @@ func (_u *TaskUpdate) SetNillableType(v *task.Type) *TaskUpdate {
 	return _u
 }
 
+// SetReviewIteration sets the "review_iteration" field.
+func (_u *TaskUpdate) SetReviewIteration(v int) *TaskUpdate {
+	_u.mutation.ResetReviewIteration()
+	_u.mutation.SetReviewIteration(v)
+	return _u
+}
+
+// SetNillableReviewIteration sets the "review_iteration" field if the given value is not nil.
+func (_u *TaskUpdate) SetNillableReviewIteration(v *int) *TaskUpdate {
+	if v != nil {
+		_u.SetReviewIteration(*v)
+	}
+	return _u
+}
+
+// AddReviewIteration adds value to the "review_iteration" field.
+func (_u *TaskUpdate) AddReviewIteration(v int) *TaskUpdate {
+	_u.mutation.AddReviewIteration(v)
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *TaskUpdate) SetStatus(v task.Status) *TaskUpdate {
 	_u.mutation.SetStatus(v)
@@ -525,6 +546,12 @@ func (_u *TaskUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.GetType(); ok {
 		_spec.SetField(task.FieldType, field.TypeEnum, value)
 	}
+	if value, ok := _u.mutation.ReviewIteration(); ok {
+		_spec.SetField(task.FieldReviewIteration, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedReviewIteration(); ok {
+		_spec.AddField(task.FieldReviewIteration, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(task.FieldStatus, field.TypeEnum, value)
 	}
@@ -892,6 +919,27 @@ func (_u *TaskUpdateOne) SetNillableType(v *task.Type) *TaskUpdateOne {
 	if v != nil {
 		_u.SetType(*v)
 	}
+	return _u
+}
+
+// SetReviewIteration sets the "review_iteration" field.
+func (_u *TaskUpdateOne) SetReviewIteration(v int) *TaskUpdateOne {
+	_u.mutation.ResetReviewIteration()
+	_u.mutation.SetReviewIteration(v)
+	return _u
+}
+
+// SetNillableReviewIteration sets the "review_iteration" field if the given value is not nil.
+func (_u *TaskUpdateOne) SetNillableReviewIteration(v *int) *TaskUpdateOne {
+	if v != nil {
+		_u.SetReviewIteration(*v)
+	}
+	return _u
+}
+
+// AddReviewIteration adds value to the "review_iteration" field.
+func (_u *TaskUpdateOne) AddReviewIteration(v int) *TaskUpdateOne {
+	_u.mutation.AddReviewIteration(v)
 	return _u
 }
 
@@ -1326,6 +1374,12 @@ func (_u *TaskUpdateOne) sqlSave(ctx context.Context) (_node *Task, err error) {
 	}
 	if value, ok := _u.mutation.GetType(); ok {
 		_spec.SetField(task.FieldType, field.TypeEnum, value)
+	}
+	if value, ok := _u.mutation.ReviewIteration(); ok {
+		_spec.SetField(task.FieldReviewIteration, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedReviewIteration(); ok {
+		_spec.AddField(task.FieldReviewIteration, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(task.FieldStatus, field.TypeEnum, value)

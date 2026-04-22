@@ -139,11 +139,11 @@ func init() {
 	// project.DefaultAutoMode holds the default value on creation for the auto_mode field.
 	project.DefaultAutoMode = projectDescAutoMode.Default.(bool)
 	// projectDescCreatedAt is the schema descriptor for created_at field.
-	projectDescCreatedAt := projectFields[8].Descriptor()
+	projectDescCreatedAt := projectFields[9].Descriptor()
 	// project.DefaultCreatedAt holds the default value on creation for the created_at field.
 	project.DefaultCreatedAt = projectDescCreatedAt.Default.(func() time.Time)
 	// projectDescUpdatedAt is the schema descriptor for updated_at field.
-	projectDescUpdatedAt := projectFields[9].Descriptor()
+	projectDescUpdatedAt := projectFields[10].Descriptor()
 	// project.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	project.DefaultUpdatedAt = projectDescUpdatedAt.Default.(func() time.Time)
 	// project.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
@@ -256,20 +256,24 @@ func init() {
 	systemsetting.UpdateDefaultUpdatedAt = systemsettingDescUpdatedAt.UpdateDefault.(func() time.Time)
 	taskFields := schema.Task{}.Fields()
 	_ = taskFields
+	// taskDescReviewIteration is the schema descriptor for review_iteration field.
+	taskDescReviewIteration := taskFields[4].Descriptor()
+	// task.DefaultReviewIteration holds the default value on creation for the review_iteration field.
+	task.DefaultReviewIteration = taskDescReviewIteration.Default.(int)
 	// taskDescPriority is the schema descriptor for priority field.
-	taskDescPriority := taskFields[5].Descriptor()
+	taskDescPriority := taskFields[6].Descriptor()
 	// task.DefaultPriority holds the default value on creation for the priority field.
 	task.DefaultPriority = taskDescPriority.Default.(int)
 	// taskDescTriggerSource is the schema descriptor for trigger_source field.
-	taskDescTriggerSource := taskFields[6].Descriptor()
+	taskDescTriggerSource := taskFields[7].Descriptor()
 	// task.DefaultTriggerSource holds the default value on creation for the trigger_source field.
 	task.DefaultTriggerSource = taskDescTriggerSource.Default.(string)
 	// taskDescCreatedAt is the schema descriptor for created_at field.
-	taskDescCreatedAt := taskFields[10].Descriptor()
+	taskDescCreatedAt := taskFields[11].Descriptor()
 	// task.DefaultCreatedAt holds the default value on creation for the created_at field.
 	task.DefaultCreatedAt = taskDescCreatedAt.Default.(func() time.Time)
 	// taskDescUpdatedAt is the schema descriptor for updated_at field.
-	taskDescUpdatedAt := taskFields[11].Descriptor()
+	taskDescUpdatedAt := taskFields[12].Descriptor()
 	// task.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	task.DefaultUpdatedAt = taskDescUpdatedAt.Default.(func() time.Time)
 	// task.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

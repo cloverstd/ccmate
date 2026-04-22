@@ -127,6 +127,33 @@ func (_u *ProjectUpdate) ClearDefaultAgentProfileID() *ProjectUpdate {
 	return _u
 }
 
+// SetReviewAgentProfileID sets the "review_agent_profile_id" field.
+func (_u *ProjectUpdate) SetReviewAgentProfileID(v int) *ProjectUpdate {
+	_u.mutation.ResetReviewAgentProfileID()
+	_u.mutation.SetReviewAgentProfileID(v)
+	return _u
+}
+
+// SetNillableReviewAgentProfileID sets the "review_agent_profile_id" field if the given value is not nil.
+func (_u *ProjectUpdate) SetNillableReviewAgentProfileID(v *int) *ProjectUpdate {
+	if v != nil {
+		_u.SetReviewAgentProfileID(*v)
+	}
+	return _u
+}
+
+// AddReviewAgentProfileID adds value to the "review_agent_profile_id" field.
+func (_u *ProjectUpdate) AddReviewAgentProfileID(v int) *ProjectUpdate {
+	_u.mutation.AddReviewAgentProfileID(v)
+	return _u
+}
+
+// ClearReviewAgentProfileID clears the value of the "review_agent_profile_id" field.
+func (_u *ProjectUpdate) ClearReviewAgentProfileID() *ProjectUpdate {
+	_u.mutation.ClearReviewAgentProfileID()
+	return _u
+}
+
 // SetDefaultPromptTemplateID sets the "default_prompt_template_id" field.
 func (_u *ProjectUpdate) SetDefaultPromptTemplateID(v int) *ProjectUpdate {
 	_u.mutation.ResetDefaultPromptTemplateID()
@@ -342,6 +369,15 @@ func (_u *ProjectUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.DefaultAgentProfileIDCleared() {
 		_spec.ClearField(project.FieldDefaultAgentProfileID, field.TypeInt)
+	}
+	if value, ok := _u.mutation.ReviewAgentProfileID(); ok {
+		_spec.SetField(project.FieldReviewAgentProfileID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedReviewAgentProfileID(); ok {
+		_spec.AddField(project.FieldReviewAgentProfileID, field.TypeInt, value)
+	}
+	if _u.mutation.ReviewAgentProfileIDCleared() {
+		_spec.ClearField(project.FieldReviewAgentProfileID, field.TypeInt)
 	}
 	if value, ok := _u.mutation.DefaultPromptTemplateID(); ok {
 		_spec.SetField(project.FieldDefaultPromptTemplateID, field.TypeInt, value)
@@ -562,6 +598,33 @@ func (_u *ProjectUpdateOne) AddDefaultAgentProfileID(v int) *ProjectUpdateOne {
 // ClearDefaultAgentProfileID clears the value of the "default_agent_profile_id" field.
 func (_u *ProjectUpdateOne) ClearDefaultAgentProfileID() *ProjectUpdateOne {
 	_u.mutation.ClearDefaultAgentProfileID()
+	return _u
+}
+
+// SetReviewAgentProfileID sets the "review_agent_profile_id" field.
+func (_u *ProjectUpdateOne) SetReviewAgentProfileID(v int) *ProjectUpdateOne {
+	_u.mutation.ResetReviewAgentProfileID()
+	_u.mutation.SetReviewAgentProfileID(v)
+	return _u
+}
+
+// SetNillableReviewAgentProfileID sets the "review_agent_profile_id" field if the given value is not nil.
+func (_u *ProjectUpdateOne) SetNillableReviewAgentProfileID(v *int) *ProjectUpdateOne {
+	if v != nil {
+		_u.SetReviewAgentProfileID(*v)
+	}
+	return _u
+}
+
+// AddReviewAgentProfileID adds value to the "review_agent_profile_id" field.
+func (_u *ProjectUpdateOne) AddReviewAgentProfileID(v int) *ProjectUpdateOne {
+	_u.mutation.AddReviewAgentProfileID(v)
+	return _u
+}
+
+// ClearReviewAgentProfileID clears the value of the "review_agent_profile_id" field.
+func (_u *ProjectUpdateOne) ClearReviewAgentProfileID() *ProjectUpdateOne {
+	_u.mutation.ClearReviewAgentProfileID()
 	return _u
 }
 
@@ -810,6 +873,15 @@ func (_u *ProjectUpdateOne) sqlSave(ctx context.Context) (_node *Project, err er
 	}
 	if _u.mutation.DefaultAgentProfileIDCleared() {
 		_spec.ClearField(project.FieldDefaultAgentProfileID, field.TypeInt)
+	}
+	if value, ok := _u.mutation.ReviewAgentProfileID(); ok {
+		_spec.SetField(project.FieldReviewAgentProfileID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedReviewAgentProfileID(); ok {
+		_spec.AddField(project.FieldReviewAgentProfileID, field.TypeInt, value)
+	}
+	if _u.mutation.ReviewAgentProfileIDCleared() {
+		_spec.ClearField(project.FieldReviewAgentProfileID, field.TypeInt)
 	}
 	if value, ok := _u.mutation.DefaultPromptTemplateID(); ok {
 		_spec.SetField(project.FieldDefaultPromptTemplateID, field.TypeInt, value)

@@ -19,7 +19,8 @@ func (Task) Fields() []ent.Field {
 		field.Int("issue_number"),
 		field.Int("pr_number").Optional().Nillable(),
 		field.Int("agent_profile_id").Optional().Nillable(),
-		field.Enum("type").Values("issue_implementation", "review_fix", "manual_followup"),
+		field.Enum("type").Values("issue_implementation", "review_fix", "manual_followup", "review"),
+		field.Int("review_iteration").Default(0),
 		field.Enum("status").
 			Values("pending", "queued", "running", "paused", "waiting_user", "succeeded", "failed", "cancelled").
 			Default("queued"),

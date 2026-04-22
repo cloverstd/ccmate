@@ -39,6 +39,7 @@ const (
 	KeyStorageBasePath   = "storage_base_path"
 	KeyDefaultPromptTemplateID = "default_prompt_template_id"
 	KeyDebugMode               = "debug_mode"
+	KeyMaxReviewIterations     = "review.max_iterations"
 	KeyRPDisplayName     = "rp_display_name"
 	KeyRPID              = "rp_id"
 	KeyRPOrigins         = "rp_origins"           // JSON array

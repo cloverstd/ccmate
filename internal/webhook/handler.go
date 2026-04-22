@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 
 	"github.com/cloverstd/ccmate/internal/ent"
@@ -55,6 +56,8 @@ func (p *Processor) ProcessEvent(ctx context.Context, event *model.NormalizedEve
 		return p.handleComment(ctx, event)
 	case model.EventPRReviewSubmitted:
 		return p.handlePRReview(ctx, event)
+	case model.EventPRSynchronize:
+		return p.handlePRSynchronize(ctx, event)
 	default:
 		slog.Info("unhandled event type", "type", event.Type)
 		return nil
@@ -185,6 +188,99 @@ func (p *Processor) handlePRReview(ctx context.Context, event *model.NormalizedE
 	}
 
 	slog.Info("review fix task created", "pr", event.PRNumber)
+	return nil
+}
+
+// handlePRSynchronize auto-enqueues a review task when a ccmate-managed PR
+// receives new commits. Only fires if the project has a review agent configured
+// and the iteration cap has not been reached. Acts as a fallback to the
+// runner's own enqueue (which covers pushes we initiate).
+func (p *Processor) handlePRSynchronize(ctx context.Context, event *model.NormalizedEvent) error {
+	repoURL := fmt.Sprintf("https://github.com/%s", event.Repo.FullName())
+	proj, err := p.client.Project.Query().Where(project.RepoURL(repoURL)).Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("finding project: %w", err)
+	}
+	if proj.ReviewAgentProfileID == nil {
+		return nil
+	}
+
+	// Only react to PRs ccmate manages (there's at least one task linked to this PR).
+	linkedTask, err := p.client.Task.Query().
+		Where(
+			enttask.HasProjectWith(project.ID(proj.ID)),
+			enttask.PrNumber(event.PRNumber),
+		).
+		Order(ent.Desc(enttask.FieldID)).
+		First(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("finding linked task: %w", err)
+	}
+
+	// Dedup: skip if an active review task already exists for this PR.
+	activeExists, err := p.client.Task.Query().
+		Where(
+			enttask.HasProjectWith(project.ID(proj.ID)),
+			enttask.IssueNumber(linkedTask.IssueNumber),
+			enttask.TypeEQ(enttask.TypeReview),
+			enttask.StatusIn(enttask.StatusQueued, enttask.StatusRunning, enttask.StatusPaused),
+		).Exist(ctx)
+	if err != nil {
+		return fmt.Errorf("checking active review task: %w", err)
+	}
+	if activeExists {
+		return nil
+	}
+
+	// Determine next iteration; enforce cap.
+	maxIter := 3
+	if p.settingsMgr != nil {
+		if raw := p.settingsMgr.GetWithDefault(ctx, settings.KeyMaxReviewIterations, "3"); raw != "" {
+			if n, perr := strconv.Atoi(raw); perr == nil && n > 0 {
+				maxIter = n
+			}
+		}
+	}
+	prior, err := p.client.Task.Query().
+		Where(
+			enttask.HasProjectWith(project.ID(proj.ID)),
+			enttask.IssueNumber(linkedTask.IssueNumber),
+			enttask.TypeIn(enttask.TypeReview, enttask.TypeReviewFix),
+		).
+		Order(ent.Desc(enttask.FieldReviewIteration)).
+		Limit(1).
+		All(ctx)
+	if err != nil {
+		return fmt.Errorf("finding prior review iterations: %w", err)
+	}
+	nextIter := 1
+	if len(prior) > 0 {
+		nextIter = prior[0].ReviewIteration + 1
+	}
+	if nextIter > maxIter {
+		slog.Info("review iteration cap reached", "pr", event.PRNumber, "max", maxIter)
+		return nil
+	}
+
+	prNum := event.PRNumber
+	_, err = p.client.Task.Create().
+		SetProject(proj).SetIssueNumber(linkedTask.IssueNumber).
+		SetNillablePrNumber(&prNum).
+		SetType(enttask.TypeReview).SetStatus(enttask.StatusQueued).
+		SetReviewIteration(nextIter).
+		SetAgentProfileID(*proj.ReviewAgentProfileID).
+		SetTriggerSource(string(model.TriggerSourceWebhook)).
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("creating review task: %w", err)
+	}
+	slog.Info("review task created from PR synchronize", "pr", prNum, "iteration", nextIter)
 	return nil
 }
 

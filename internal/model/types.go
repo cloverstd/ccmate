@@ -179,6 +179,23 @@ type CreatePRRequest struct {
 	Base  string
 }
 
+// ReviewComment is a single line-level comment in a PR review.
+type ReviewComment struct {
+	Path      string `json:"path"`
+	Line      int    `json:"line"`
+	StartLine int    `json:"start_line,omitempty"`
+	Side      string `json:"side,omitempty"` // "RIGHT" or "LEFT"; defaults to RIGHT
+	Body      string `json:"body"`
+}
+
+// CreateReviewRequest contains parameters for submitting a PR review.
+type CreateReviewRequest struct {
+	Body     string          // top-level review summary
+	Event    string          // "COMMENT", "REQUEST_CHANGES", "APPROVE"
+	CommitID string          // optional; empty → latest
+	Comments []ReviewComment // optional line-level comments
+}
+
 // AgentEvent is a unified event from an agent adapter.
 type AgentEventType string
 

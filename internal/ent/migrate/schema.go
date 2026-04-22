@@ -113,6 +113,7 @@ var (
 		{Name: "default_branch", Type: field.TypeString, Default: "main"},
 		{Name: "auto_mode", Type: field.TypeBool, Default: false},
 		{Name: "default_agent_profile_id", Type: field.TypeInt, Nullable: true},
+		{Name: "review_agent_profile_id", Type: field.TypeInt, Nullable: true},
 		{Name: "default_prompt_template_id", Type: field.TypeInt, Nullable: true},
 		{Name: "prompt_template_scope", Type: field.TypeEnum, Enums: []string{"global_only", "project_only", "merged"}, Default: "project_only"},
 		{Name: "created_at", Type: field.TypeTime},
@@ -304,7 +305,8 @@ var (
 		{Name: "issue_number", Type: field.TypeInt},
 		{Name: "pr_number", Type: field.TypeInt, Nullable: true},
 		{Name: "agent_profile_id", Type: field.TypeInt, Nullable: true},
-		{Name: "type", Type: field.TypeEnum, Enums: []string{"issue_implementation", "review_fix", "manual_followup"}},
+		{Name: "type", Type: field.TypeEnum, Enums: []string{"issue_implementation", "review_fix", "manual_followup", "review"}},
+		{Name: "review_iteration", Type: field.TypeInt, Default: 0},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"pending", "queued", "running", "paused", "waiting_user", "succeeded", "failed", "cancelled"}, Default: "queued"},
 		{Name: "priority", Type: field.TypeInt, Default: 0},
 		{Name: "trigger_source", Type: field.TypeString, Default: "webhook"},
@@ -323,7 +325,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "tasks_projects_tasks",
-				Columns:    []*schema.Column{TasksColumns[13]},
+				Columns:    []*schema.Column{TasksColumns[14]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -332,7 +334,7 @@ var (
 			{
 				Name:    "task_status",
 				Unique:  false,
-				Columns: []*schema.Column{TasksColumns[5]},
+				Columns: []*schema.Column{TasksColumns[6]},
 			},
 			{
 				Name:    "task_issue_number",
@@ -342,7 +344,7 @@ var (
 			{
 				Name:    "task_telegram_chat_id_telegram_message_id",
 				Unique:  false,
-				Columns: []*schema.Column{TasksColumns[9], TasksColumns[10]},
+				Columns: []*schema.Column{TasksColumns[10], TasksColumns[11]},
 			},
 		},
 	}

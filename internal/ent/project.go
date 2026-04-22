@@ -29,6 +29,8 @@ type Project struct {
 	AutoMode bool `json:"auto_mode,omitempty"`
 	// DefaultAgentProfileID holds the value of the "default_agent_profile_id" field.
 	DefaultAgentProfileID *int `json:"default_agent_profile_id,omitempty"`
+	// ReviewAgentProfileID holds the value of the "review_agent_profile_id" field.
+	ReviewAgentProfileID *int `json:"review_agent_profile_id,omitempty"`
 	// DefaultPromptTemplateID holds the value of the "default_prompt_template_id" field.
 	DefaultPromptTemplateID *int `json:"default_prompt_template_id,omitempty"`
 	// PromptTemplateScope holds the value of the "prompt_template_scope" field.
@@ -79,7 +81,7 @@ func (*Project) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case project.FieldAutoMode:
 			values[i] = new(sql.NullBool)
-		case project.FieldID, project.FieldDefaultAgentProfileID, project.FieldDefaultPromptTemplateID:
+		case project.FieldID, project.FieldDefaultAgentProfileID, project.FieldReviewAgentProfileID, project.FieldDefaultPromptTemplateID:
 			values[i] = new(sql.NullInt64)
 		case project.FieldName, project.FieldRepoURL, project.FieldGitProvider, project.FieldDefaultBranch, project.FieldPromptTemplateScope:
 			values[i] = new(sql.NullString)
@@ -142,6 +144,13 @@ func (_m *Project) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.DefaultAgentProfileID = new(int)
 				*_m.DefaultAgentProfileID = int(value.Int64)
+			}
+		case project.FieldReviewAgentProfileID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field review_agent_profile_id", values[i])
+			} else if value.Valid {
+				_m.ReviewAgentProfileID = new(int)
+				*_m.ReviewAgentProfileID = int(value.Int64)
 			}
 		case project.FieldDefaultPromptTemplateID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -231,6 +240,11 @@ func (_m *Project) String() string {
 	builder.WriteString(", ")
 	if v := _m.DefaultAgentProfileID; v != nil {
 		builder.WriteString("default_agent_profile_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.ReviewAgentProfileID; v != nil {
+		builder.WriteString("review_agent_profile_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")

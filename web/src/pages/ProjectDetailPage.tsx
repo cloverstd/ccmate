@@ -24,7 +24,7 @@ export default function ProjectDetailPage() {
   const [promptTitle, setPromptTitle] = useState('')
   const [promptBody, setPromptBody] = useState('')
   const [promptPreview, setPromptPreview] = useState(false)
-  const [projectForm, setProjectForm] = useState({ default_branch: 'main', auto_mode: false, default_agent_profile_id: '', default_prompt_template_id: '', prompt_template_scope: 'project_only' as string })
+  const [projectForm, setProjectForm] = useState({ default_branch: 'main', auto_mode: false, default_agent_profile_id: '', review_agent_profile_id: '', default_prompt_template_id: '', prompt_template_scope: 'project_only' as string })
   const [taskAgentProfileID, setTaskAgentProfileID] = useState('')
 
   const { data: project, isLoading } = useQuery({ queryKey: ['project', projectId], queryFn: () => projectsApi.get(projectId), enabled: projectId > 0 })
@@ -59,6 +59,7 @@ export default function ProjectDetailPage() {
     return {
       ...project, default_branch: form.default_branch, auto_mode: form.auto_mode,
       default_agent_profile_id: form.default_agent_profile_id ? parseInt(form.default_agent_profile_id as string, 10) : null,
+      review_agent_profile_id: form.review_agent_profile_id ? parseInt(form.review_agent_profile_id as string, 10) : null,
       default_prompt_template_id: form.default_prompt_template_id ? parseInt(form.default_prompt_template_id as string, 10) : null,
       prompt_template_scope: form.prompt_template_scope as 'global_only' | 'project_only' | 'merged',
     }
@@ -102,6 +103,7 @@ export default function ProjectDetailPage() {
     setProjectForm({
       default_branch: project.default_branch, auto_mode: project.auto_mode,
       default_agent_profile_id: pd,
+      review_agent_profile_id: project.review_agent_profile_id != null ? String(project.review_agent_profile_id) : '',
       default_prompt_template_id: project.default_prompt_template_id != null ? String(project.default_prompt_template_id) : '',
       prompt_template_scope: project.prompt_template_scope || 'project_only',
     })
@@ -164,6 +166,14 @@ export default function ProjectDetailPage() {
                   <option value="">Use global default</option>
                   {(models || []).map((m: AgentProfile) => <option key={m.id} value={String(m.id)}>{m.provider} / {m.model || 'default'}</option>)}
                 </Select>
+              </div>
+              <div>
+                <Label>Review Agent</Label>
+                <Select value={projectForm.review_agent_profile_id} onChange={(e) => setProjectForm({ ...projectForm, review_agent_profile_id: e.target.value })} className="w-full">
+                  <option value="">Disabled (no auto-review)</option>
+                  {(models || []).map((m: AgentProfile) => <option key={m.id} value={String(m.id)}>{m.provider} / {m.model || 'default'}</option>)}
+                </Select>
+                <p className="text-xs text-gray-400 mt-1">When set, ccmate auto-reviews every new PR push and opens follow-up fix tasks.</p>
               </div>
               <div>
                 <Label>Template Scope</Label>

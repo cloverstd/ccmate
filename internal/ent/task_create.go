@@ -66,6 +66,20 @@ func (_c *TaskCreate) SetType(v task.Type) *TaskCreate {
 	return _c
 }
 
+// SetReviewIteration sets the "review_iteration" field.
+func (_c *TaskCreate) SetReviewIteration(v int) *TaskCreate {
+	_c.mutation.SetReviewIteration(v)
+	return _c
+}
+
+// SetNillableReviewIteration sets the "review_iteration" field if the given value is not nil.
+func (_c *TaskCreate) SetNillableReviewIteration(v *int) *TaskCreate {
+	if v != nil {
+		_c.SetReviewIteration(*v)
+	}
+	return _c
+}
+
 // SetStatus sets the "status" field.
 func (_c *TaskCreate) SetStatus(v task.Status) *TaskCreate {
 	_c.mutation.SetStatus(v)
@@ -307,6 +321,10 @@ func (_c *TaskCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *TaskCreate) defaults() {
+	if _, ok := _c.mutation.ReviewIteration(); !ok {
+		v := task.DefaultReviewIteration
+		_c.mutation.SetReviewIteration(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := task.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -341,6 +359,9 @@ func (_c *TaskCreate) check() error {
 		if err := task.TypeValidator(v); err != nil {
 			return &ValidationError{Name: "type", err: fmt.Errorf(`ent: validator failed for field "Task.type": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.ReviewIteration(); !ok {
+		return &ValidationError{Name: "review_iteration", err: errors.New(`ent: missing required field "Task.review_iteration"`)}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "Task.status"`)}
@@ -406,6 +427,10 @@ func (_c *TaskCreate) createSpec() (*Task, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.GetType(); ok {
 		_spec.SetField(task.FieldType, field.TypeEnum, value)
 		_node.Type = value
+	}
+	if value, ok := _c.mutation.ReviewIteration(); ok {
+		_spec.SetField(task.FieldReviewIteration, field.TypeInt, value)
+		_node.ReviewIteration = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(task.FieldStatus, field.TypeEnum, value)

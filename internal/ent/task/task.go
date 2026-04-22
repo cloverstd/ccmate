@@ -23,6 +23,8 @@ const (
 	FieldAgentProfileID = "agent_profile_id"
 	// FieldType holds the string denoting the type field in the database.
 	FieldType = "type"
+	// FieldReviewIteration holds the string denoting the review_iteration field in the database.
+	FieldReviewIteration = "review_iteration"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldPriority holds the string denoting the priority field in the database.
@@ -104,6 +106,7 @@ var Columns = []string{
 	FieldPrNumber,
 	FieldAgentProfileID,
 	FieldType,
+	FieldReviewIteration,
 	FieldStatus,
 	FieldPriority,
 	FieldTriggerSource,
@@ -136,6 +139,8 @@ func ValidColumn(column string) bool {
 }
 
 var (
+	// DefaultReviewIteration holds the default value on creation for the "review_iteration" field.
+	DefaultReviewIteration int
 	// DefaultPriority holds the default value on creation for the "priority" field.
 	DefaultPriority int
 	// DefaultTriggerSource holds the default value on creation for the "trigger_source" field.
@@ -156,6 +161,7 @@ const (
 	TypeIssueImplementation Type = "issue_implementation"
 	TypeReviewFix           Type = "review_fix"
 	TypeManualFollowup      Type = "manual_followup"
+	TypeReview              Type = "review"
 )
 
 func (_type Type) String() string {
@@ -165,7 +171,7 @@ func (_type Type) String() string {
 // TypeValidator is a validator for the "type" field enum values. It is called by the builders before save.
 func TypeValidator(_type Type) error {
 	switch _type {
-	case TypeIssueImplementation, TypeReviewFix, TypeManualFollowup:
+	case TypeIssueImplementation, TypeReviewFix, TypeManualFollowup, TypeReview:
 		return nil
 	default:
 		return fmt.Errorf("task: invalid enum value for type field: %q", _type)
@@ -230,6 +236,11 @@ func ByAgentProfileID(opts ...sql.OrderTermOption) OrderOption {
 // ByType orders the results by the type field.
 func ByType(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldType, opts...).ToFunc()
+}
+
+// ByReviewIteration orders the results by the review_iteration field.
+func ByReviewIteration(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldReviewIteration, opts...).ToFunc()
 }
 
 // ByStatus orders the results by the status field.

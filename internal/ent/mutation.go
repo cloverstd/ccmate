@@ -2660,6 +2660,8 @@ type ProjectMutation struct {
 	auto_mode                     *bool
 	default_agent_profile_id      *int
 	adddefault_agent_profile_id   *int
+	review_agent_profile_id       *int
+	addreview_agent_profile_id    *int
 	default_prompt_template_id    *int
 	adddefault_prompt_template_id *int
 	prompt_template_scope         *project.PromptTemplateScope
@@ -3025,6 +3027,76 @@ func (m *ProjectMutation) ResetDefaultAgentProfileID() {
 	delete(m.clearedFields, project.FieldDefaultAgentProfileID)
 }
 
+// SetReviewAgentProfileID sets the "review_agent_profile_id" field.
+func (m *ProjectMutation) SetReviewAgentProfileID(i int) {
+	m.review_agent_profile_id = &i
+	m.addreview_agent_profile_id = nil
+}
+
+// ReviewAgentProfileID returns the value of the "review_agent_profile_id" field in the mutation.
+func (m *ProjectMutation) ReviewAgentProfileID() (r int, exists bool) {
+	v := m.review_agent_profile_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldReviewAgentProfileID returns the old "review_agent_profile_id" field's value of the Project entity.
+// If the Project object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProjectMutation) OldReviewAgentProfileID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldReviewAgentProfileID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldReviewAgentProfileID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldReviewAgentProfileID: %w", err)
+	}
+	return oldValue.ReviewAgentProfileID, nil
+}
+
+// AddReviewAgentProfileID adds i to the "review_agent_profile_id" field.
+func (m *ProjectMutation) AddReviewAgentProfileID(i int) {
+	if m.addreview_agent_profile_id != nil {
+		*m.addreview_agent_profile_id += i
+	} else {
+		m.addreview_agent_profile_id = &i
+	}
+}
+
+// AddedReviewAgentProfileID returns the value that was added to the "review_agent_profile_id" field in this mutation.
+func (m *ProjectMutation) AddedReviewAgentProfileID() (r int, exists bool) {
+	v := m.addreview_agent_profile_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearReviewAgentProfileID clears the value of the "review_agent_profile_id" field.
+func (m *ProjectMutation) ClearReviewAgentProfileID() {
+	m.review_agent_profile_id = nil
+	m.addreview_agent_profile_id = nil
+	m.clearedFields[project.FieldReviewAgentProfileID] = struct{}{}
+}
+
+// ReviewAgentProfileIDCleared returns if the "review_agent_profile_id" field was cleared in this mutation.
+func (m *ProjectMutation) ReviewAgentProfileIDCleared() bool {
+	_, ok := m.clearedFields[project.FieldReviewAgentProfileID]
+	return ok
+}
+
+// ResetReviewAgentProfileID resets all changes to the "review_agent_profile_id" field.
+func (m *ProjectMutation) ResetReviewAgentProfileID() {
+	m.review_agent_profile_id = nil
+	m.addreview_agent_profile_id = nil
+	delete(m.clearedFields, project.FieldReviewAgentProfileID)
+}
+
 // SetDefaultPromptTemplateID sets the "default_prompt_template_id" field.
 func (m *ProjectMutation) SetDefaultPromptTemplateID(i int) {
 	m.default_prompt_template_id = &i
@@ -3345,7 +3417,7 @@ func (m *ProjectMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ProjectMutation) Fields() []string {
-	fields := make([]string, 0, 10)
+	fields := make([]string, 0, 11)
 	if m.name != nil {
 		fields = append(fields, project.FieldName)
 	}
@@ -3363,6 +3435,9 @@ func (m *ProjectMutation) Fields() []string {
 	}
 	if m.default_agent_profile_id != nil {
 		fields = append(fields, project.FieldDefaultAgentProfileID)
+	}
+	if m.review_agent_profile_id != nil {
+		fields = append(fields, project.FieldReviewAgentProfileID)
 	}
 	if m.default_prompt_template_id != nil {
 		fields = append(fields, project.FieldDefaultPromptTemplateID)
@@ -3396,6 +3471,8 @@ func (m *ProjectMutation) Field(name string) (ent.Value, bool) {
 		return m.AutoMode()
 	case project.FieldDefaultAgentProfileID:
 		return m.DefaultAgentProfileID()
+	case project.FieldReviewAgentProfileID:
+		return m.ReviewAgentProfileID()
 	case project.FieldDefaultPromptTemplateID:
 		return m.DefaultPromptTemplateID()
 	case project.FieldPromptTemplateScope:
@@ -3425,6 +3502,8 @@ func (m *ProjectMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldAutoMode(ctx)
 	case project.FieldDefaultAgentProfileID:
 		return m.OldDefaultAgentProfileID(ctx)
+	case project.FieldReviewAgentProfileID:
+		return m.OldReviewAgentProfileID(ctx)
 	case project.FieldDefaultPromptTemplateID:
 		return m.OldDefaultPromptTemplateID(ctx)
 	case project.FieldPromptTemplateScope:
@@ -3484,6 +3563,13 @@ func (m *ProjectMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetDefaultAgentProfileID(v)
 		return nil
+	case project.FieldReviewAgentProfileID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetReviewAgentProfileID(v)
+		return nil
 	case project.FieldDefaultPromptTemplateID:
 		v, ok := value.(int)
 		if !ok {
@@ -3523,6 +3609,9 @@ func (m *ProjectMutation) AddedFields() []string {
 	if m.adddefault_agent_profile_id != nil {
 		fields = append(fields, project.FieldDefaultAgentProfileID)
 	}
+	if m.addreview_agent_profile_id != nil {
+		fields = append(fields, project.FieldReviewAgentProfileID)
+	}
 	if m.adddefault_prompt_template_id != nil {
 		fields = append(fields, project.FieldDefaultPromptTemplateID)
 	}
@@ -3536,6 +3625,8 @@ func (m *ProjectMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
 	case project.FieldDefaultAgentProfileID:
 		return m.AddedDefaultAgentProfileID()
+	case project.FieldReviewAgentProfileID:
+		return m.AddedReviewAgentProfileID()
 	case project.FieldDefaultPromptTemplateID:
 		return m.AddedDefaultPromptTemplateID()
 	}
@@ -3554,6 +3645,13 @@ func (m *ProjectMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddDefaultAgentProfileID(v)
 		return nil
+	case project.FieldReviewAgentProfileID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddReviewAgentProfileID(v)
+		return nil
 	case project.FieldDefaultPromptTemplateID:
 		v, ok := value.(int)
 		if !ok {
@@ -3571,6 +3669,9 @@ func (m *ProjectMutation) ClearedFields() []string {
 	var fields []string
 	if m.FieldCleared(project.FieldDefaultAgentProfileID) {
 		fields = append(fields, project.FieldDefaultAgentProfileID)
+	}
+	if m.FieldCleared(project.FieldReviewAgentProfileID) {
+		fields = append(fields, project.FieldReviewAgentProfileID)
 	}
 	if m.FieldCleared(project.FieldDefaultPromptTemplateID) {
 		fields = append(fields, project.FieldDefaultPromptTemplateID)
@@ -3591,6 +3692,9 @@ func (m *ProjectMutation) ClearField(name string) error {
 	switch name {
 	case project.FieldDefaultAgentProfileID:
 		m.ClearDefaultAgentProfileID()
+		return nil
+	case project.FieldReviewAgentProfileID:
+		m.ClearReviewAgentProfileID()
 		return nil
 	case project.FieldDefaultPromptTemplateID:
 		m.ClearDefaultPromptTemplateID()
@@ -3620,6 +3724,9 @@ func (m *ProjectMutation) ResetField(name string) error {
 		return nil
 	case project.FieldDefaultAgentProfileID:
 		m.ResetDefaultAgentProfileID()
+		return nil
+	case project.FieldReviewAgentProfileID:
+		m.ResetReviewAgentProfileID()
 		return nil
 	case project.FieldDefaultPromptTemplateID:
 		m.ResetDefaultPromptTemplateID()
@@ -8250,6 +8357,8 @@ type TaskMutation struct {
 	agent_profile_id       *int
 	addagent_profile_id    *int
 	_type                  *task.Type
+	review_iteration       *int
+	addreview_iteration    *int
 	status                 *task.Status
 	priority               *int
 	addpriority            *int
@@ -8610,6 +8719,62 @@ func (m *TaskMutation) OldType(ctx context.Context) (v task.Type, err error) {
 // ResetType resets all changes to the "type" field.
 func (m *TaskMutation) ResetType() {
 	m._type = nil
+}
+
+// SetReviewIteration sets the "review_iteration" field.
+func (m *TaskMutation) SetReviewIteration(i int) {
+	m.review_iteration = &i
+	m.addreview_iteration = nil
+}
+
+// ReviewIteration returns the value of the "review_iteration" field in the mutation.
+func (m *TaskMutation) ReviewIteration() (r int, exists bool) {
+	v := m.review_iteration
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldReviewIteration returns the old "review_iteration" field's value of the Task entity.
+// If the Task object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TaskMutation) OldReviewIteration(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldReviewIteration is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldReviewIteration requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldReviewIteration: %w", err)
+	}
+	return oldValue.ReviewIteration, nil
+}
+
+// AddReviewIteration adds i to the "review_iteration" field.
+func (m *TaskMutation) AddReviewIteration(i int) {
+	if m.addreview_iteration != nil {
+		*m.addreview_iteration += i
+	} else {
+		m.addreview_iteration = &i
+	}
+}
+
+// AddedReviewIteration returns the value that was added to the "review_iteration" field in this mutation.
+func (m *TaskMutation) AddedReviewIteration() (r int, exists bool) {
+	v := m.addreview_iteration
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetReviewIteration resets all changes to the "review_iteration" field.
+func (m *TaskMutation) ResetReviewIteration() {
+	m.review_iteration = nil
+	m.addreview_iteration = nil
 }
 
 // SetStatus sets the "status" field.
@@ -9314,7 +9479,7 @@ func (m *TaskMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TaskMutation) Fields() []string {
-	fields := make([]string, 0, 12)
+	fields := make([]string, 0, 13)
 	if m.issue_number != nil {
 		fields = append(fields, task.FieldIssueNumber)
 	}
@@ -9326,6 +9491,9 @@ func (m *TaskMutation) Fields() []string {
 	}
 	if m._type != nil {
 		fields = append(fields, task.FieldType)
+	}
+	if m.review_iteration != nil {
+		fields = append(fields, task.FieldReviewIteration)
 	}
 	if m.status != nil {
 		fields = append(fields, task.FieldStatus)
@@ -9367,6 +9535,8 @@ func (m *TaskMutation) Field(name string) (ent.Value, bool) {
 		return m.AgentProfileID()
 	case task.FieldType:
 		return m.GetType()
+	case task.FieldReviewIteration:
+		return m.ReviewIteration()
 	case task.FieldStatus:
 		return m.Status()
 	case task.FieldPriority:
@@ -9400,6 +9570,8 @@ func (m *TaskMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldAgentProfileID(ctx)
 	case task.FieldType:
 		return m.OldType(ctx)
+	case task.FieldReviewIteration:
+		return m.OldReviewIteration(ctx)
 	case task.FieldStatus:
 		return m.OldStatus(ctx)
 	case task.FieldPriority:
@@ -9452,6 +9624,13 @@ func (m *TaskMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetType(v)
+		return nil
+	case task.FieldReviewIteration:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetReviewIteration(v)
 		return nil
 	case task.FieldStatus:
 		v, ok := value.(task.Status)
@@ -9526,6 +9705,9 @@ func (m *TaskMutation) AddedFields() []string {
 	if m.addagent_profile_id != nil {
 		fields = append(fields, task.FieldAgentProfileID)
 	}
+	if m.addreview_iteration != nil {
+		fields = append(fields, task.FieldReviewIteration)
+	}
 	if m.addpriority != nil {
 		fields = append(fields, task.FieldPriority)
 	}
@@ -9549,6 +9731,8 @@ func (m *TaskMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedPrNumber()
 	case task.FieldAgentProfileID:
 		return m.AddedAgentProfileID()
+	case task.FieldReviewIteration:
+		return m.AddedReviewIteration()
 	case task.FieldPriority:
 		return m.AddedPriority()
 	case task.FieldCurrentSessionID:
@@ -9584,6 +9768,13 @@ func (m *TaskMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddAgentProfileID(v)
+		return nil
+	case task.FieldReviewIteration:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddReviewIteration(v)
 		return nil
 	case task.FieldPriority:
 		v, ok := value.(int)
@@ -9677,6 +9868,9 @@ func (m *TaskMutation) ResetField(name string) error {
 		return nil
 	case task.FieldType:
 		m.ResetType()
+		return nil
+	case task.FieldReviewIteration:
+		m.ResetReviewIteration()
 		return nil
 	case task.FieldStatus:
 		m.ResetStatus()

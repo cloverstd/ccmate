@@ -405,6 +405,60 @@ func (p *Provider) ListPullRequestReviews(ctx context.Context, repo model.RepoRe
 	return result, nil
 }
 
+func (p *Provider) CreatePullRequestReview(ctx context.Context, repo model.RepoRef, prNumber int, req model.CreateReviewRequest) (*model.Review, error) {
+	draftComments := make([]*gh.DraftReviewComment, 0, len(req.Comments))
+	for i := range req.Comments {
+		c := req.Comments[i]
+		side := c.Side
+		if side == "" {
+			side = "RIGHT"
+		}
+		dc := &gh.DraftReviewComment{
+			Path: gh.Ptr(c.Path),
+			Body: gh.Ptr(c.Body),
+			Line: gh.Ptr(c.Line),
+			Side: gh.Ptr(side),
+		}
+		if c.StartLine > 0 && c.StartLine < c.Line {
+			dc.StartLine = gh.Ptr(c.StartLine)
+			dc.StartSide = gh.Ptr(side)
+		}
+		draftComments = append(draftComments, dc)
+	}
+
+	reviewReq := &gh.PullRequestReviewRequest{
+		Body:     gh.Ptr(req.Body),
+		Event:    gh.Ptr(req.Event),
+		Comments: draftComments,
+	}
+	if req.CommitID != "" {
+		reviewReq.CommitID = gh.Ptr(req.CommitID)
+	}
+	r, _, err := p.client.PullRequests.CreateReview(ctx, repo.Owner, repo.Name, prNumber, reviewReq)
+	if err != nil {
+		return nil, fmt.Errorf("creating PR review: %w", err)
+	}
+	return &model.Review{ID: r.GetID(), State: r.GetState(), Body: r.GetBody(), User: r.GetUser().GetLogin()}, nil
+}
+
+// AddIssueReaction adds an emoji reaction to an issue or PR (PRs share the issue reaction endpoint).
+// content values: "+1", "-1", "laugh", "confused", "heart", "hooray", "rocket", "eyes".
+func (p *Provider) AddIssueReaction(ctx context.Context, repo model.RepoRef, number int, content string) (int64, error) {
+	r, _, err := p.client.Reactions.CreateIssueReaction(ctx, repo.Owner, repo.Name, number, content)
+	if err != nil {
+		return 0, fmt.Errorf("creating reaction: %w", err)
+	}
+	return r.GetID(), nil
+}
+
+func (p *Provider) RemoveIssueReaction(ctx context.Context, repo model.RepoRef, number int, reactionID int64) error {
+	_, err := p.client.Reactions.DeleteIssueReaction(ctx, repo.Owner, repo.Name, number, reactionID)
+	if err != nil {
+		return fmt.Errorf("deleting reaction: %w", err)
+	}
+	return nil
+}
+
 func (p *Provider) GetPullRequestDiff(ctx context.Context, repo model.RepoRef, prNumber int) (string, error) {
 	diff, _, err := p.client.PullRequests.GetRaw(ctx, repo.Owner, repo.Name, prNumber, gh.RawOptions{Type: gh.Diff})
 	if err != nil {
