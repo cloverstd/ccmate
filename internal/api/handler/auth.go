@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -214,16 +215,18 @@ func (h *AuthHandler) PasskeyLoginFinish(w http.ResponseWriter, r *http.Request)
 	}
 	parsedResponse, err := protocol.ParseCredentialRequestResponseBody(bytes.NewReader(rawBody))
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error":"invalid credential response: %s"}`, err.Error()), http.StatusBadRequest)
+		slog.Warn("passkey login: parse credential response failed", "user", meta.Username, "err", err)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid credential response"})
 		return
 	}
 	user := h.passkeySvc.GetUser(meta.Username)
 	if user == nil {
-		http.Error(w, `{"error":"user not found"}`, http.StatusUnauthorized)
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "user not found"})
 		return
 	}
 	if _, err := h.passkeySvc.WebAuthn().ValidateLogin(user, *session, parsedResponse); err != nil {
-		http.Error(w, fmt.Sprintf(`{"error":"passkey verification failed: %s"}`, err.Error()), http.StatusUnauthorized)
+		slog.Warn("passkey login: validate failed", "user", meta.Username, "err", err)
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "passkey verification failed"})
 		return
 	}
 	delete(h.loginSessions, meta.Username)
