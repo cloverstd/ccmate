@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -194,37 +195,39 @@ func (h *AuthHandler) PasskeyLoginStart(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *AuthHandler) PasskeyLoginFinish(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Username string          `json:"username"`
-		Response json.RawMessage `json:"response_data"`
+	rawBody, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, `{"error":"read body failed"}`, http.StatusBadRequest)
+		return
 	}
-	rawBody, _ := io.ReadAll(r.Body)
-	json.Unmarshal(rawBody, &body)
-	if body.Username == "" {
+	var meta struct {
+		Username string `json:"username"`
+	}
+	if err := json.Unmarshal(rawBody, &meta); err != nil || meta.Username == "" {
 		http.Error(w, `{"error":"username required"}`, http.StatusBadRequest)
 		return
 	}
-	session, ok := h.loginSessions[body.Username]
+	session, ok := h.loginSessions[meta.Username]
 	if !ok {
 		http.Error(w, `{"error":"no pending login"}`, http.StatusBadRequest)
 		return
 	}
-	parsedResponse, err := protocol.ParseCredentialRequestResponse(r)
+	parsedResponse, err := protocol.ParseCredentialRequestResponseBody(bytes.NewReader(rawBody))
 	if err != nil {
-		parsedResponse, err = parseCredentialFromJSON(rawBody)
-		if err != nil {
-			http.Error(w, `{"error":"invalid credential response"}`, http.StatusBadRequest)
-			return
-		}
-	}
-	user := h.passkeySvc.GetUser(body.Username)
-	_, err = h.passkeySvc.WebAuthn().ValidateLogin(user, *session, parsedResponse)
-	if err != nil {
-		http.Error(w, `{"error":"passkey verification failed"}`, http.StatusUnauthorized)
+		http.Error(w, fmt.Sprintf(`{"error":"invalid credential response: %s"}`, err.Error()), http.StatusBadRequest)
 		return
 	}
-	delete(h.loginSessions, body.Username)
-	h.setSessionCookie(w, body.Username)
+	user := h.passkeySvc.GetUser(meta.Username)
+	if user == nil {
+		http.Error(w, `{"error":"user not found"}`, http.StatusUnauthorized)
+		return
+	}
+	if _, err := h.passkeySvc.WebAuthn().ValidateLogin(user, *session, parsedResponse); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"passkey verification failed: %s"}`, err.Error()), http.StatusUnauthorized)
+		return
+	}
+	delete(h.loginSessions, meta.Username)
+	h.setSessionCookie(w, meta.Username)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "authenticated"})
 }
 
@@ -296,6 +299,3 @@ func indexOf(s, sub string) int {
 	return -1
 }
 
-func parseCredentialFromJSON(data []byte) (*protocol.ParsedCredentialAssertionData, error) {
-	return nil, fmt.Errorf("credential parsing from JSON body not implemented")
-}
