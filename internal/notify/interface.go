@@ -1,6 +1,9 @@
 package notify
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // NotifyEvent carries task status change information for notification providers.
 type NotifyEvent struct {
@@ -13,6 +16,20 @@ type NotifyEvent struct {
 	NewStatus   string
 	Error       string // populated only on failure
 	BaseURL     string // ccmate base URL for task links
+	PRNumber    int    // 0 when no PR yet
+	BranchName  string
+	AgentName   string
+	TaskType    string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+// PRURL returns the GitHub PR link.
+func (e NotifyEvent) PRURL() string {
+	if e.RepoURL == "" || e.PRNumber == 0 {
+		return ""
+	}
+	return e.RepoURL + "/pull/" + itoa(e.PRNumber)
 }
 
 // TaskURL returns the ccmate UI link for this task.

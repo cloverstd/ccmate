@@ -134,7 +134,15 @@ func (m *Manager) buildEvent(ctx context.Context, taskID int, oldStatus, newStat
 		IssueNumber: t.IssueNumber,
 		OldStatus:   oldStatus,
 		NewStatus:   newStatus,
+		TaskType:    t.Type.String(),
+		CreatedAt:   t.CreatedAt,
+		UpdatedAt:   t.UpdatedAt,
+		BranchName:  fmt.Sprintf("ccmate/issue-%d-task-%d", t.IssueNumber, taskID),
 		BaseURL:     m.settingsMgr.GetWithDefault(ctx, keyBaseURL, ""),
+	}
+
+	if t.PrNumber != nil {
+		event.PRNumber = *t.PrNumber
 	}
 
 	if t.Edges.Project != nil {
