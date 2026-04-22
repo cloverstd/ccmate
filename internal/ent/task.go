@@ -36,6 +36,10 @@ type Task struct {
 	TriggerSource string `json:"trigger_source,omitempty"`
 	// CurrentSessionID holds the value of the "current_session_id" field.
 	CurrentSessionID *int `json:"current_session_id,omitempty"`
+	// TelegramChatID holds the value of the "telegram_chat_id" field.
+	TelegramChatID string `json:"telegram_chat_id,omitempty"`
+	// TelegramMessageID holds the value of the "telegram_message_id" field.
+	TelegramMessageID *int64 `json:"telegram_message_id,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -131,9 +135,9 @@ func (*Task) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case task.FieldID, task.FieldIssueNumber, task.FieldPrNumber, task.FieldAgentProfileID, task.FieldPriority, task.FieldCurrentSessionID:
+		case task.FieldID, task.FieldIssueNumber, task.FieldPrNumber, task.FieldAgentProfileID, task.FieldPriority, task.FieldCurrentSessionID, task.FieldTelegramMessageID:
 			values[i] = new(sql.NullInt64)
-		case task.FieldType, task.FieldStatus, task.FieldTriggerSource:
+		case task.FieldType, task.FieldStatus, task.FieldTriggerSource, task.FieldTelegramChatID:
 			values[i] = new(sql.NullString)
 		case task.FieldCreatedAt, task.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -210,6 +214,19 @@ func (_m *Task) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.CurrentSessionID = new(int)
 				*_m.CurrentSessionID = int(value.Int64)
+			}
+		case task.FieldTelegramChatID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field telegram_chat_id", values[i])
+			} else if value.Valid {
+				_m.TelegramChatID = value.String
+			}
+		case task.FieldTelegramMessageID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field telegram_message_id", values[i])
+			} else if value.Valid {
+				_m.TelegramMessageID = new(int64)
+				*_m.TelegramMessageID = value.Int64
 			}
 		case task.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -323,6 +340,14 @@ func (_m *Task) String() string {
 	builder.WriteString(", ")
 	if v := _m.CurrentSessionID; v != nil {
 		builder.WriteString("current_session_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("telegram_chat_id=")
+	builder.WriteString(_m.TelegramChatID)
+	builder.WriteString(", ")
+	if v := _m.TelegramMessageID; v != nil {
+		builder.WriteString("telegram_message_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")

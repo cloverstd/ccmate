@@ -199,6 +199,53 @@ func (_u *TaskUpdate) ClearCurrentSessionID() *TaskUpdate {
 	return _u
 }
 
+// SetTelegramChatID sets the "telegram_chat_id" field.
+func (_u *TaskUpdate) SetTelegramChatID(v string) *TaskUpdate {
+	_u.mutation.SetTelegramChatID(v)
+	return _u
+}
+
+// SetNillableTelegramChatID sets the "telegram_chat_id" field if the given value is not nil.
+func (_u *TaskUpdate) SetNillableTelegramChatID(v *string) *TaskUpdate {
+	if v != nil {
+		_u.SetTelegramChatID(*v)
+	}
+	return _u
+}
+
+// ClearTelegramChatID clears the value of the "telegram_chat_id" field.
+func (_u *TaskUpdate) ClearTelegramChatID() *TaskUpdate {
+	_u.mutation.ClearTelegramChatID()
+	return _u
+}
+
+// SetTelegramMessageID sets the "telegram_message_id" field.
+func (_u *TaskUpdate) SetTelegramMessageID(v int64) *TaskUpdate {
+	_u.mutation.ResetTelegramMessageID()
+	_u.mutation.SetTelegramMessageID(v)
+	return _u
+}
+
+// SetNillableTelegramMessageID sets the "telegram_message_id" field if the given value is not nil.
+func (_u *TaskUpdate) SetNillableTelegramMessageID(v *int64) *TaskUpdate {
+	if v != nil {
+		_u.SetTelegramMessageID(*v)
+	}
+	return _u
+}
+
+// AddTelegramMessageID adds value to the "telegram_message_id" field.
+func (_u *TaskUpdate) AddTelegramMessageID(v int64) *TaskUpdate {
+	_u.mutation.AddTelegramMessageID(v)
+	return _u
+}
+
+// ClearTelegramMessageID clears the value of the "telegram_message_id" field.
+func (_u *TaskUpdate) ClearTelegramMessageID() *TaskUpdate {
+	_u.mutation.ClearTelegramMessageID()
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *TaskUpdate) SetUpdatedAt(v time.Time) *TaskUpdate {
 	_u.mutation.SetUpdatedAt(v)
@@ -498,6 +545,21 @@ func (_u *TaskUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.CurrentSessionIDCleared() {
 		_spec.ClearField(task.FieldCurrentSessionID, field.TypeInt)
+	}
+	if value, ok := _u.mutation.TelegramChatID(); ok {
+		_spec.SetField(task.FieldTelegramChatID, field.TypeString, value)
+	}
+	if _u.mutation.TelegramChatIDCleared() {
+		_spec.ClearField(task.FieldTelegramChatID, field.TypeString)
+	}
+	if value, ok := _u.mutation.TelegramMessageID(); ok {
+		_spec.SetField(task.FieldTelegramMessageID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTelegramMessageID(); ok {
+		_spec.AddField(task.FieldTelegramMessageID, field.TypeInt64, value)
+	}
+	if _u.mutation.TelegramMessageIDCleared() {
+		_spec.ClearField(task.FieldTelegramMessageID, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(task.FieldUpdatedAt, field.TypeTime, value)
@@ -909,6 +971,53 @@ func (_u *TaskUpdateOne) ClearCurrentSessionID() *TaskUpdateOne {
 	return _u
 }
 
+// SetTelegramChatID sets the "telegram_chat_id" field.
+func (_u *TaskUpdateOne) SetTelegramChatID(v string) *TaskUpdateOne {
+	_u.mutation.SetTelegramChatID(v)
+	return _u
+}
+
+// SetNillableTelegramChatID sets the "telegram_chat_id" field if the given value is not nil.
+func (_u *TaskUpdateOne) SetNillableTelegramChatID(v *string) *TaskUpdateOne {
+	if v != nil {
+		_u.SetTelegramChatID(*v)
+	}
+	return _u
+}
+
+// ClearTelegramChatID clears the value of the "telegram_chat_id" field.
+func (_u *TaskUpdateOne) ClearTelegramChatID() *TaskUpdateOne {
+	_u.mutation.ClearTelegramChatID()
+	return _u
+}
+
+// SetTelegramMessageID sets the "telegram_message_id" field.
+func (_u *TaskUpdateOne) SetTelegramMessageID(v int64) *TaskUpdateOne {
+	_u.mutation.ResetTelegramMessageID()
+	_u.mutation.SetTelegramMessageID(v)
+	return _u
+}
+
+// SetNillableTelegramMessageID sets the "telegram_message_id" field if the given value is not nil.
+func (_u *TaskUpdateOne) SetNillableTelegramMessageID(v *int64) *TaskUpdateOne {
+	if v != nil {
+		_u.SetTelegramMessageID(*v)
+	}
+	return _u
+}
+
+// AddTelegramMessageID adds value to the "telegram_message_id" field.
+func (_u *TaskUpdateOne) AddTelegramMessageID(v int64) *TaskUpdateOne {
+	_u.mutation.AddTelegramMessageID(v)
+	return _u
+}
+
+// ClearTelegramMessageID clears the value of the "telegram_message_id" field.
+func (_u *TaskUpdateOne) ClearTelegramMessageID() *TaskUpdateOne {
+	_u.mutation.ClearTelegramMessageID()
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *TaskUpdateOne) SetUpdatedAt(v time.Time) *TaskUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
@@ -1238,6 +1347,21 @@ func (_u *TaskUpdateOne) sqlSave(ctx context.Context) (_node *Task, err error) {
 	}
 	if _u.mutation.CurrentSessionIDCleared() {
 		_spec.ClearField(task.FieldCurrentSessionID, field.TypeInt)
+	}
+	if value, ok := _u.mutation.TelegramChatID(); ok {
+		_spec.SetField(task.FieldTelegramChatID, field.TypeString, value)
+	}
+	if _u.mutation.TelegramChatIDCleared() {
+		_spec.ClearField(task.FieldTelegramChatID, field.TypeString)
+	}
+	if value, ok := _u.mutation.TelegramMessageID(); ok {
+		_spec.SetField(task.FieldTelegramMessageID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTelegramMessageID(); ok {
+		_spec.AddField(task.FieldTelegramMessageID, field.TypeInt64, value)
+	}
+	if _u.mutation.TelegramMessageIDCleared() {
+		_spec.ClearField(task.FieldTelegramMessageID, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(task.FieldUpdatedAt, field.TypeTime, value)

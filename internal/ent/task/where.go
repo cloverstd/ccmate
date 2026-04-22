@@ -85,6 +85,16 @@ func CurrentSessionID(v int) predicate.Task {
 	return predicate.Task(sql.FieldEQ(FieldCurrentSessionID, v))
 }
 
+// TelegramChatID applies equality check predicate on the "telegram_chat_id" field. It's identical to TelegramChatIDEQ.
+func TelegramChatID(v string) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldTelegramChatID, v))
+}
+
+// TelegramMessageID applies equality check predicate on the "telegram_message_id" field. It's identical to TelegramMessageIDEQ.
+func TelegramMessageID(v int64) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldTelegramMessageID, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.Task {
 	return predicate.Task(sql.FieldEQ(FieldCreatedAt, v))
@@ -428,6 +438,131 @@ func CurrentSessionIDIsNil() predicate.Task {
 // CurrentSessionIDNotNil applies the NotNil predicate on the "current_session_id" field.
 func CurrentSessionIDNotNil() predicate.Task {
 	return predicate.Task(sql.FieldNotNull(FieldCurrentSessionID))
+}
+
+// TelegramChatIDEQ applies the EQ predicate on the "telegram_chat_id" field.
+func TelegramChatIDEQ(v string) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldTelegramChatID, v))
+}
+
+// TelegramChatIDNEQ applies the NEQ predicate on the "telegram_chat_id" field.
+func TelegramChatIDNEQ(v string) predicate.Task {
+	return predicate.Task(sql.FieldNEQ(FieldTelegramChatID, v))
+}
+
+// TelegramChatIDIn applies the In predicate on the "telegram_chat_id" field.
+func TelegramChatIDIn(vs ...string) predicate.Task {
+	return predicate.Task(sql.FieldIn(FieldTelegramChatID, vs...))
+}
+
+// TelegramChatIDNotIn applies the NotIn predicate on the "telegram_chat_id" field.
+func TelegramChatIDNotIn(vs ...string) predicate.Task {
+	return predicate.Task(sql.FieldNotIn(FieldTelegramChatID, vs...))
+}
+
+// TelegramChatIDGT applies the GT predicate on the "telegram_chat_id" field.
+func TelegramChatIDGT(v string) predicate.Task {
+	return predicate.Task(sql.FieldGT(FieldTelegramChatID, v))
+}
+
+// TelegramChatIDGTE applies the GTE predicate on the "telegram_chat_id" field.
+func TelegramChatIDGTE(v string) predicate.Task {
+	return predicate.Task(sql.FieldGTE(FieldTelegramChatID, v))
+}
+
+// TelegramChatIDLT applies the LT predicate on the "telegram_chat_id" field.
+func TelegramChatIDLT(v string) predicate.Task {
+	return predicate.Task(sql.FieldLT(FieldTelegramChatID, v))
+}
+
+// TelegramChatIDLTE applies the LTE predicate on the "telegram_chat_id" field.
+func TelegramChatIDLTE(v string) predicate.Task {
+	return predicate.Task(sql.FieldLTE(FieldTelegramChatID, v))
+}
+
+// TelegramChatIDContains applies the Contains predicate on the "telegram_chat_id" field.
+func TelegramChatIDContains(v string) predicate.Task {
+	return predicate.Task(sql.FieldContains(FieldTelegramChatID, v))
+}
+
+// TelegramChatIDHasPrefix applies the HasPrefix predicate on the "telegram_chat_id" field.
+func TelegramChatIDHasPrefix(v string) predicate.Task {
+	return predicate.Task(sql.FieldHasPrefix(FieldTelegramChatID, v))
+}
+
+// TelegramChatIDHasSuffix applies the HasSuffix predicate on the "telegram_chat_id" field.
+func TelegramChatIDHasSuffix(v string) predicate.Task {
+	return predicate.Task(sql.FieldHasSuffix(FieldTelegramChatID, v))
+}
+
+// TelegramChatIDIsNil applies the IsNil predicate on the "telegram_chat_id" field.
+func TelegramChatIDIsNil() predicate.Task {
+	return predicate.Task(sql.FieldIsNull(FieldTelegramChatID))
+}
+
+// TelegramChatIDNotNil applies the NotNil predicate on the "telegram_chat_id" field.
+func TelegramChatIDNotNil() predicate.Task {
+	return predicate.Task(sql.FieldNotNull(FieldTelegramChatID))
+}
+
+// TelegramChatIDEqualFold applies the EqualFold predicate on the "telegram_chat_id" field.
+func TelegramChatIDEqualFold(v string) predicate.Task {
+	return predicate.Task(sql.FieldEqualFold(FieldTelegramChatID, v))
+}
+
+// TelegramChatIDContainsFold applies the ContainsFold predicate on the "telegram_chat_id" field.
+func TelegramChatIDContainsFold(v string) predicate.Task {
+	return predicate.Task(sql.FieldContainsFold(FieldTelegramChatID, v))
+}
+
+// TelegramMessageIDEQ applies the EQ predicate on the "telegram_message_id" field.
+func TelegramMessageIDEQ(v int64) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldTelegramMessageID, v))
+}
+
+// TelegramMessageIDNEQ applies the NEQ predicate on the "telegram_message_id" field.
+func TelegramMessageIDNEQ(v int64) predicate.Task {
+	return predicate.Task(sql.FieldNEQ(FieldTelegramMessageID, v))
+}
+
+// TelegramMessageIDIn applies the In predicate on the "telegram_message_id" field.
+func TelegramMessageIDIn(vs ...int64) predicate.Task {
+	return predicate.Task(sql.FieldIn(FieldTelegramMessageID, vs...))
+}
+
+// TelegramMessageIDNotIn applies the NotIn predicate on the "telegram_message_id" field.
+func TelegramMessageIDNotIn(vs ...int64) predicate.Task {
+	return predicate.Task(sql.FieldNotIn(FieldTelegramMessageID, vs...))
+}
+
+// TelegramMessageIDGT applies the GT predicate on the "telegram_message_id" field.
+func TelegramMessageIDGT(v int64) predicate.Task {
+	return predicate.Task(sql.FieldGT(FieldTelegramMessageID, v))
+}
+
+// TelegramMessageIDGTE applies the GTE predicate on the "telegram_message_id" field.
+func TelegramMessageIDGTE(v int64) predicate.Task {
+	return predicate.Task(sql.FieldGTE(FieldTelegramMessageID, v))
+}
+
+// TelegramMessageIDLT applies the LT predicate on the "telegram_message_id" field.
+func TelegramMessageIDLT(v int64) predicate.Task {
+	return predicate.Task(sql.FieldLT(FieldTelegramMessageID, v))
+}
+
+// TelegramMessageIDLTE applies the LTE predicate on the "telegram_message_id" field.
+func TelegramMessageIDLTE(v int64) predicate.Task {
+	return predicate.Task(sql.FieldLTE(FieldTelegramMessageID, v))
+}
+
+// TelegramMessageIDIsNil applies the IsNil predicate on the "telegram_message_id" field.
+func TelegramMessageIDIsNil() predicate.Task {
+	return predicate.Task(sql.FieldIsNull(FieldTelegramMessageID))
+}
+
+// TelegramMessageIDNotNil applies the NotNil predicate on the "telegram_message_id" field.
+func TelegramMessageIDNotNil() predicate.Task {
+	return predicate.Task(sql.FieldNotNull(FieldTelegramMessageID))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

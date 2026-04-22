@@ -309,6 +309,8 @@ var (
 		{Name: "priority", Type: field.TypeInt, Default: 0},
 		{Name: "trigger_source", Type: field.TypeString, Default: "webhook"},
 		{Name: "current_session_id", Type: field.TypeInt, Nullable: true},
+		{Name: "telegram_chat_id", Type: field.TypeString, Nullable: true},
+		{Name: "telegram_message_id", Type: field.TypeInt64, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "project_tasks", Type: field.TypeInt},
@@ -321,7 +323,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "tasks_projects_tasks",
-				Columns:    []*schema.Column{TasksColumns[11]},
+				Columns:    []*schema.Column{TasksColumns[13]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},

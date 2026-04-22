@@ -122,6 +122,34 @@ func (_c *TaskCreate) SetNillableCurrentSessionID(v *int) *TaskCreate {
 	return _c
 }
 
+// SetTelegramChatID sets the "telegram_chat_id" field.
+func (_c *TaskCreate) SetTelegramChatID(v string) *TaskCreate {
+	_c.mutation.SetTelegramChatID(v)
+	return _c
+}
+
+// SetNillableTelegramChatID sets the "telegram_chat_id" field if the given value is not nil.
+func (_c *TaskCreate) SetNillableTelegramChatID(v *string) *TaskCreate {
+	if v != nil {
+		_c.SetTelegramChatID(*v)
+	}
+	return _c
+}
+
+// SetTelegramMessageID sets the "telegram_message_id" field.
+func (_c *TaskCreate) SetTelegramMessageID(v int64) *TaskCreate {
+	_c.mutation.SetTelegramMessageID(v)
+	return _c
+}
+
+// SetNillableTelegramMessageID sets the "telegram_message_id" field if the given value is not nil.
+func (_c *TaskCreate) SetNillableTelegramMessageID(v *int64) *TaskCreate {
+	if v != nil {
+		_c.SetTelegramMessageID(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *TaskCreate) SetCreatedAt(v time.Time) *TaskCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -394,6 +422,14 @@ func (_c *TaskCreate) createSpec() (*Task, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.CurrentSessionID(); ok {
 		_spec.SetField(task.FieldCurrentSessionID, field.TypeInt, value)
 		_node.CurrentSessionID = &value
+	}
+	if value, ok := _c.mutation.TelegramChatID(); ok {
+		_spec.SetField(task.FieldTelegramChatID, field.TypeString, value)
+		_node.TelegramChatID = value
+	}
+	if value, ok := _c.mutation.TelegramMessageID(); ok {
+		_spec.SetField(task.FieldTelegramMessageID, field.TypeInt64, value)
+		_node.TelegramMessageID = &value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(task.FieldCreatedAt, field.TypeTime, value)

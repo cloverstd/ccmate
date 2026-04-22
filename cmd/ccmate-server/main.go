@@ -130,7 +130,8 @@ func main() {
 
 	// Notifications
 	notifyMgr := notify.NewManager(settingsMgr, client)
-	notifyMgr.RegisterProvider(tgnotify.New(settingsMgr))
+	tgProvider := tgnotify.New(settingsMgr, client)
+	notifyMgr.RegisterProvider(tgProvider)
 
 	// SSE + Scheduler
 	broker := sse.NewBroker()
@@ -150,6 +151,7 @@ func main() {
 	go sched.Run(schedCtx)
 	go scheduler.RunCleanup(schedCtx, client, settingsMgr)
 	go scheduler.RunIssueScanner(schedCtx, client, settingsMgr, gitProvMgr)
+	go tgProvider.RunPoller(schedCtx, scheduler.NewTelegramDispatcher(sched))
 
 	go func() {
 		slog.Info("starting server", "addr", cfg.Server.Addr())

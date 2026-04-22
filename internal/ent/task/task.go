@@ -31,6 +31,10 @@ const (
 	FieldTriggerSource = "trigger_source"
 	// FieldCurrentSessionID holds the string denoting the current_session_id field in the database.
 	FieldCurrentSessionID = "current_session_id"
+	// FieldTelegramChatID holds the string denoting the telegram_chat_id field in the database.
+	FieldTelegramChatID = "telegram_chat_id"
+	// FieldTelegramMessageID holds the string denoting the telegram_message_id field in the database.
+	FieldTelegramMessageID = "telegram_message_id"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -104,6 +108,8 @@ var Columns = []string{
 	FieldPriority,
 	FieldTriggerSource,
 	FieldCurrentSessionID,
+	FieldTelegramChatID,
+	FieldTelegramMessageID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
@@ -244,6 +250,16 @@ func ByTriggerSource(opts ...sql.OrderTermOption) OrderOption {
 // ByCurrentSessionID orders the results by the current_session_id field.
 func ByCurrentSessionID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCurrentSessionID, opts...).ToFunc()
+}
+
+// ByTelegramChatID orders the results by the telegram_chat_id field.
+func ByTelegramChatID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTelegramChatID, opts...).ToFunc()
+}
+
+// ByTelegramMessageID orders the results by the telegram_message_id field.
+func ByTelegramMessageID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTelegramMessageID, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

@@ -8256,6 +8256,9 @@ type TaskMutation struct {
 	trigger_source         *string
 	current_session_id     *int
 	addcurrent_session_id  *int
+	telegram_chat_id       *string
+	telegram_message_id    *int64
+	addtelegram_message_id *int64
 	created_at             *time.Time
 	updated_at             *time.Time
 	clearedFields          map[string]struct{}
@@ -8807,6 +8810,125 @@ func (m *TaskMutation) ResetCurrentSessionID() {
 	delete(m.clearedFields, task.FieldCurrentSessionID)
 }
 
+// SetTelegramChatID sets the "telegram_chat_id" field.
+func (m *TaskMutation) SetTelegramChatID(s string) {
+	m.telegram_chat_id = &s
+}
+
+// TelegramChatID returns the value of the "telegram_chat_id" field in the mutation.
+func (m *TaskMutation) TelegramChatID() (r string, exists bool) {
+	v := m.telegram_chat_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTelegramChatID returns the old "telegram_chat_id" field's value of the Task entity.
+// If the Task object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TaskMutation) OldTelegramChatID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTelegramChatID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTelegramChatID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTelegramChatID: %w", err)
+	}
+	return oldValue.TelegramChatID, nil
+}
+
+// ClearTelegramChatID clears the value of the "telegram_chat_id" field.
+func (m *TaskMutation) ClearTelegramChatID() {
+	m.telegram_chat_id = nil
+	m.clearedFields[task.FieldTelegramChatID] = struct{}{}
+}
+
+// TelegramChatIDCleared returns if the "telegram_chat_id" field was cleared in this mutation.
+func (m *TaskMutation) TelegramChatIDCleared() bool {
+	_, ok := m.clearedFields[task.FieldTelegramChatID]
+	return ok
+}
+
+// ResetTelegramChatID resets all changes to the "telegram_chat_id" field.
+func (m *TaskMutation) ResetTelegramChatID() {
+	m.telegram_chat_id = nil
+	delete(m.clearedFields, task.FieldTelegramChatID)
+}
+
+// SetTelegramMessageID sets the "telegram_message_id" field.
+func (m *TaskMutation) SetTelegramMessageID(i int64) {
+	m.telegram_message_id = &i
+	m.addtelegram_message_id = nil
+}
+
+// TelegramMessageID returns the value of the "telegram_message_id" field in the mutation.
+func (m *TaskMutation) TelegramMessageID() (r int64, exists bool) {
+	v := m.telegram_message_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTelegramMessageID returns the old "telegram_message_id" field's value of the Task entity.
+// If the Task object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TaskMutation) OldTelegramMessageID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTelegramMessageID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTelegramMessageID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTelegramMessageID: %w", err)
+	}
+	return oldValue.TelegramMessageID, nil
+}
+
+// AddTelegramMessageID adds i to the "telegram_message_id" field.
+func (m *TaskMutation) AddTelegramMessageID(i int64) {
+	if m.addtelegram_message_id != nil {
+		*m.addtelegram_message_id += i
+	} else {
+		m.addtelegram_message_id = &i
+	}
+}
+
+// AddedTelegramMessageID returns the value that was added to the "telegram_message_id" field in this mutation.
+func (m *TaskMutation) AddedTelegramMessageID() (r int64, exists bool) {
+	v := m.addtelegram_message_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearTelegramMessageID clears the value of the "telegram_message_id" field.
+func (m *TaskMutation) ClearTelegramMessageID() {
+	m.telegram_message_id = nil
+	m.addtelegram_message_id = nil
+	m.clearedFields[task.FieldTelegramMessageID] = struct{}{}
+}
+
+// TelegramMessageIDCleared returns if the "telegram_message_id" field was cleared in this mutation.
+func (m *TaskMutation) TelegramMessageIDCleared() bool {
+	_, ok := m.clearedFields[task.FieldTelegramMessageID]
+	return ok
+}
+
+// ResetTelegramMessageID resets all changes to the "telegram_message_id" field.
+func (m *TaskMutation) ResetTelegramMessageID() {
+	m.telegram_message_id = nil
+	m.addtelegram_message_id = nil
+	delete(m.clearedFields, task.FieldTelegramMessageID)
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *TaskMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -9192,7 +9314,7 @@ func (m *TaskMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TaskMutation) Fields() []string {
-	fields := make([]string, 0, 10)
+	fields := make([]string, 0, 12)
 	if m.issue_number != nil {
 		fields = append(fields, task.FieldIssueNumber)
 	}
@@ -9216,6 +9338,12 @@ func (m *TaskMutation) Fields() []string {
 	}
 	if m.current_session_id != nil {
 		fields = append(fields, task.FieldCurrentSessionID)
+	}
+	if m.telegram_chat_id != nil {
+		fields = append(fields, task.FieldTelegramChatID)
+	}
+	if m.telegram_message_id != nil {
+		fields = append(fields, task.FieldTelegramMessageID)
 	}
 	if m.created_at != nil {
 		fields = append(fields, task.FieldCreatedAt)
@@ -9247,6 +9375,10 @@ func (m *TaskMutation) Field(name string) (ent.Value, bool) {
 		return m.TriggerSource()
 	case task.FieldCurrentSessionID:
 		return m.CurrentSessionID()
+	case task.FieldTelegramChatID:
+		return m.TelegramChatID()
+	case task.FieldTelegramMessageID:
+		return m.TelegramMessageID()
 	case task.FieldCreatedAt:
 		return m.CreatedAt()
 	case task.FieldUpdatedAt:
@@ -9276,6 +9408,10 @@ func (m *TaskMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldTriggerSource(ctx)
 	case task.FieldCurrentSessionID:
 		return m.OldCurrentSessionID(ctx)
+	case task.FieldTelegramChatID:
+		return m.OldTelegramChatID(ctx)
+	case task.FieldTelegramMessageID:
+		return m.OldTelegramMessageID(ctx)
 	case task.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	case task.FieldUpdatedAt:
@@ -9345,6 +9481,20 @@ func (m *TaskMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetCurrentSessionID(v)
 		return nil
+	case task.FieldTelegramChatID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTelegramChatID(v)
+		return nil
+	case task.FieldTelegramMessageID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTelegramMessageID(v)
+		return nil
 	case task.FieldCreatedAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -9382,6 +9532,9 @@ func (m *TaskMutation) AddedFields() []string {
 	if m.addcurrent_session_id != nil {
 		fields = append(fields, task.FieldCurrentSessionID)
 	}
+	if m.addtelegram_message_id != nil {
+		fields = append(fields, task.FieldTelegramMessageID)
+	}
 	return fields
 }
 
@@ -9400,6 +9553,8 @@ func (m *TaskMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedPriority()
 	case task.FieldCurrentSessionID:
 		return m.AddedCurrentSessionID()
+	case task.FieldTelegramMessageID:
+		return m.AddedTelegramMessageID()
 	}
 	return nil, false
 }
@@ -9444,6 +9599,13 @@ func (m *TaskMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddCurrentSessionID(v)
 		return nil
+	case task.FieldTelegramMessageID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTelegramMessageID(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Task numeric field %s", name)
 }
@@ -9460,6 +9622,12 @@ func (m *TaskMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(task.FieldCurrentSessionID) {
 		fields = append(fields, task.FieldCurrentSessionID)
+	}
+	if m.FieldCleared(task.FieldTelegramChatID) {
+		fields = append(fields, task.FieldTelegramChatID)
+	}
+	if m.FieldCleared(task.FieldTelegramMessageID) {
+		fields = append(fields, task.FieldTelegramMessageID)
 	}
 	return fields
 }
@@ -9483,6 +9651,12 @@ func (m *TaskMutation) ClearField(name string) error {
 		return nil
 	case task.FieldCurrentSessionID:
 		m.ClearCurrentSessionID()
+		return nil
+	case task.FieldTelegramChatID:
+		m.ClearTelegramChatID()
+		return nil
+	case task.FieldTelegramMessageID:
+		m.ClearTelegramMessageID()
 		return nil
 	}
 	return fmt.Errorf("unknown Task nullable field %s", name)
@@ -9515,6 +9689,12 @@ func (m *TaskMutation) ResetField(name string) error {
 		return nil
 	case task.FieldCurrentSessionID:
 		m.ResetCurrentSessionID()
+		return nil
+	case task.FieldTelegramChatID:
+		m.ResetTelegramChatID()
+		return nil
+	case task.FieldTelegramMessageID:
+		m.ResetTelegramMessageID()
 		return nil
 	case task.FieldCreatedAt:
 		m.ResetCreatedAt()
