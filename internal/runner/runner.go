@@ -540,6 +540,24 @@ func (r *Runner) loadGlobalDefaultTemplate(ctx context.Context) *ent.PromptTempl
 	return tmpl
 }
 
+// loadReviewPromptTemplate loads the project's review-specific prompt template.
+// Only the system_prompt is applied; the task prompt is always produced by
+// BuildReviewPrompt to preserve the JSON output contract.
+func (r *Runner) loadReviewPromptTemplate(ctx context.Context, proj *ent.Project, builder *prompt.Builder) {
+	if proj.ReviewPromptTemplateID == nil {
+		return
+	}
+	tmpl, err := r.client.PromptTemplate.Query().
+		Where(prompttemplate.ID(*proj.ReviewPromptTemplateID)).
+		Only(ctx)
+	if err != nil || tmpl == nil {
+		return
+	}
+	if tmpl.SystemPrompt != "" {
+		builder.WithSystemPrompt(tmpl.SystemPrompt)
+	}
+}
+
 // loadProjectDefaultTemplate loads the project's default prompt template, falling back to label rules.
 func (r *Runner) loadProjectDefaultTemplate(ctx context.Context, proj *ent.Project) *ent.PromptTemplate {
 	if proj.DefaultPromptTemplateID != nil {
@@ -829,7 +847,7 @@ func (r *Runner) runReviewTask(
 	}
 
 	builder := prompt.NewBuilder()
-	r.loadProjectPromptTemplate(ctx, proj, builder)
+	r.loadReviewPromptTemplate(ctx, proj, builder)
 	systemPrompt := builder.BuildSystemPrompt()
 	taskPrompt := builder.BuildReviewPrompt(issueForCtx, pr, diff, priorReviews)
 

@@ -46,6 +46,7 @@ type CreateProjectRequest struct {
 	DefaultAgentProfileID   *int   `json:"default_agent_profile_id"`
 	ReviewAgentProfileID    *int   `json:"review_agent_profile_id"`
 	DefaultPromptTemplateID *int   `json:"default_prompt_template_id"`
+	ReviewPromptTemplateID  *int   `json:"review_prompt_template_id"`
 	PromptTemplateScope     string `json:"prompt_template_scope"`
 }
 
@@ -108,6 +109,17 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		builder = builder.SetDefaultPromptTemplateID(*req.DefaultPromptTemplateID)
+	}
+	if req.ReviewPromptTemplateID != nil {
+		if _, err := h.client.PromptTemplate.Get(r.Context(), *req.ReviewPromptTemplateID); err != nil {
+			if ent.IsNotFound(err) {
+				http.Error(w, `{"error":"review prompt template not found"}`, http.StatusBadRequest)
+				return
+			}
+			http.Error(w, `{"error":"failed to validate review prompt template"}`, http.StatusInternalServerError)
+			return
+		}
+		builder = builder.SetReviewPromptTemplateID(*req.ReviewPromptTemplateID)
 	}
 	if req.PromptTemplateScope != "" {
 		builder = builder.SetPromptTemplateScope(project.PromptTemplateScope(req.PromptTemplateScope))
@@ -176,6 +188,19 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 		builder = builder.SetDefaultPromptTemplateID(*req.DefaultPromptTemplateID)
 	} else {
 		builder = builder.ClearDefaultPromptTemplateID()
+	}
+	if req.ReviewPromptTemplateID != nil {
+		if _, err := h.client.PromptTemplate.Get(r.Context(), *req.ReviewPromptTemplateID); err != nil {
+			if ent.IsNotFound(err) {
+				http.Error(w, `{"error":"review prompt template not found"}`, http.StatusBadRequest)
+				return
+			}
+			http.Error(w, `{"error":"failed to validate review prompt template"}`, http.StatusInternalServerError)
+			return
+		}
+		builder = builder.SetReviewPromptTemplateID(*req.ReviewPromptTemplateID)
+	} else {
+		builder = builder.ClearReviewPromptTemplateID()
 	}
 	if req.PromptTemplateScope != "" {
 		builder = builder.SetPromptTemplateScope(project.PromptTemplateScope(req.PromptTemplateScope))

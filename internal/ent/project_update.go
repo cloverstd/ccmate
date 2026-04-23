@@ -181,6 +181,33 @@ func (_u *ProjectUpdate) ClearDefaultPromptTemplateID() *ProjectUpdate {
 	return _u
 }
 
+// SetReviewPromptTemplateID sets the "review_prompt_template_id" field.
+func (_u *ProjectUpdate) SetReviewPromptTemplateID(v int) *ProjectUpdate {
+	_u.mutation.ResetReviewPromptTemplateID()
+	_u.mutation.SetReviewPromptTemplateID(v)
+	return _u
+}
+
+// SetNillableReviewPromptTemplateID sets the "review_prompt_template_id" field if the given value is not nil.
+func (_u *ProjectUpdate) SetNillableReviewPromptTemplateID(v *int) *ProjectUpdate {
+	if v != nil {
+		_u.SetReviewPromptTemplateID(*v)
+	}
+	return _u
+}
+
+// AddReviewPromptTemplateID adds value to the "review_prompt_template_id" field.
+func (_u *ProjectUpdate) AddReviewPromptTemplateID(v int) *ProjectUpdate {
+	_u.mutation.AddReviewPromptTemplateID(v)
+	return _u
+}
+
+// ClearReviewPromptTemplateID clears the value of the "review_prompt_template_id" field.
+func (_u *ProjectUpdate) ClearReviewPromptTemplateID() *ProjectUpdate {
+	_u.mutation.ClearReviewPromptTemplateID()
+	return _u
+}
+
 // SetPromptTemplateScope sets the "prompt_template_scope" field.
 func (_u *ProjectUpdate) SetPromptTemplateScope(v project.PromptTemplateScope) *ProjectUpdate {
 	_u.mutation.SetPromptTemplateScope(v)
@@ -387,6 +414,15 @@ func (_u *ProjectUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.DefaultPromptTemplateIDCleared() {
 		_spec.ClearField(project.FieldDefaultPromptTemplateID, field.TypeInt)
+	}
+	if value, ok := _u.mutation.ReviewPromptTemplateID(); ok {
+		_spec.SetField(project.FieldReviewPromptTemplateID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedReviewPromptTemplateID(); ok {
+		_spec.AddField(project.FieldReviewPromptTemplateID, field.TypeInt, value)
+	}
+	if _u.mutation.ReviewPromptTemplateIDCleared() {
+		_spec.ClearField(project.FieldReviewPromptTemplateID, field.TypeInt)
 	}
 	if value, ok := _u.mutation.PromptTemplateScope(); ok {
 		_spec.SetField(project.FieldPromptTemplateScope, field.TypeEnum, value)
@@ -655,6 +691,33 @@ func (_u *ProjectUpdateOne) ClearDefaultPromptTemplateID() *ProjectUpdateOne {
 	return _u
 }
 
+// SetReviewPromptTemplateID sets the "review_prompt_template_id" field.
+func (_u *ProjectUpdateOne) SetReviewPromptTemplateID(v int) *ProjectUpdateOne {
+	_u.mutation.ResetReviewPromptTemplateID()
+	_u.mutation.SetReviewPromptTemplateID(v)
+	return _u
+}
+
+// SetNillableReviewPromptTemplateID sets the "review_prompt_template_id" field if the given value is not nil.
+func (_u *ProjectUpdateOne) SetNillableReviewPromptTemplateID(v *int) *ProjectUpdateOne {
+	if v != nil {
+		_u.SetReviewPromptTemplateID(*v)
+	}
+	return _u
+}
+
+// AddReviewPromptTemplateID adds value to the "review_prompt_template_id" field.
+func (_u *ProjectUpdateOne) AddReviewPromptTemplateID(v int) *ProjectUpdateOne {
+	_u.mutation.AddReviewPromptTemplateID(v)
+	return _u
+}
+
+// ClearReviewPromptTemplateID clears the value of the "review_prompt_template_id" field.
+func (_u *ProjectUpdateOne) ClearReviewPromptTemplateID() *ProjectUpdateOne {
+	_u.mutation.ClearReviewPromptTemplateID()
+	return _u
+}
+
 // SetPromptTemplateScope sets the "prompt_template_scope" field.
 func (_u *ProjectUpdateOne) SetPromptTemplateScope(v project.PromptTemplateScope) *ProjectUpdateOne {
 	_u.mutation.SetPromptTemplateScope(v)
@@ -891,6 +954,15 @@ func (_u *ProjectUpdateOne) sqlSave(ctx context.Context) (_node *Project, err er
 	}
 	if _u.mutation.DefaultPromptTemplateIDCleared() {
 		_spec.ClearField(project.FieldDefaultPromptTemplateID, field.TypeInt)
+	}
+	if value, ok := _u.mutation.ReviewPromptTemplateID(); ok {
+		_spec.SetField(project.FieldReviewPromptTemplateID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedReviewPromptTemplateID(); ok {
+		_spec.AddField(project.FieldReviewPromptTemplateID, field.TypeInt, value)
+	}
+	if _u.mutation.ReviewPromptTemplateIDCleared() {
+		_spec.ClearField(project.FieldReviewPromptTemplateID, field.TypeInt)
 	}
 	if value, ok := _u.mutation.PromptTemplateScope(); ok {
 		_spec.SetField(project.FieldPromptTemplateScope, field.TypeEnum, value)

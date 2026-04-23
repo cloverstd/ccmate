@@ -118,6 +118,20 @@ func (_c *ProjectCreate) SetNillableDefaultPromptTemplateID(v *int) *ProjectCrea
 	return _c
 }
 
+// SetReviewPromptTemplateID sets the "review_prompt_template_id" field.
+func (_c *ProjectCreate) SetReviewPromptTemplateID(v int) *ProjectCreate {
+	_c.mutation.SetReviewPromptTemplateID(v)
+	return _c
+}
+
+// SetNillableReviewPromptTemplateID sets the "review_prompt_template_id" field if the given value is not nil.
+func (_c *ProjectCreate) SetNillableReviewPromptTemplateID(v *int) *ProjectCreate {
+	if v != nil {
+		_c.SetReviewPromptTemplateID(*v)
+	}
+	return _c
+}
+
 // SetPromptTemplateScope sets the "prompt_template_scope" field.
 func (_c *ProjectCreate) SetPromptTemplateScope(v project.PromptTemplateScope) *ProjectCreate {
 	_c.mutation.SetPromptTemplateScope(v)
@@ -349,6 +363,10 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.DefaultPromptTemplateID(); ok {
 		_spec.SetField(project.FieldDefaultPromptTemplateID, field.TypeInt, value)
 		_node.DefaultPromptTemplateID = &value
+	}
+	if value, ok := _c.mutation.ReviewPromptTemplateID(); ok {
+		_spec.SetField(project.FieldReviewPromptTemplateID, field.TypeInt, value)
+		_node.ReviewPromptTemplateID = &value
 	}
 	if value, ok := _c.mutation.PromptTemplateScope(); ok {
 		_spec.SetField(project.FieldPromptTemplateScope, field.TypeEnum, value)

@@ -115,6 +115,7 @@ var (
 		{Name: "default_agent_profile_id", Type: field.TypeInt, Nullable: true},
 		{Name: "review_agent_profile_id", Type: field.TypeInt, Nullable: true},
 		{Name: "default_prompt_template_id", Type: field.TypeInt, Nullable: true},
+		{Name: "review_prompt_template_id", Type: field.TypeInt, Nullable: true},
 		{Name: "prompt_template_scope", Type: field.TypeEnum, Enums: []string{"global_only", "project_only", "merged"}, Default: "project_only"},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
