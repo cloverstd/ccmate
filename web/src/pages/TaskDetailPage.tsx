@@ -2,7 +2,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import Markdown from '../components/Markdown'
-import { tasksApi, subscribeToTaskEvents, type TaskStatus, type SessionMessage, type SessionEvent, type RepoIssue, type RepoPR, type PromptSnapshot } from '../lib/api'
+import { tasksApi, subscribeToTaskEvents, type TaskStatus, type SessionMessage, type SessionEvent, type RepoIssue, type RepoPR, type PromptSnapshot, type TaskDetail } from '../lib/api'
 import StatusBadge from '../components/StatusBadge'
 import { ToolCallView, ToolResultView, parseToolResult } from '../components/ToolView'
 import { Btn, Tag, Card, CardContent } from '../components/ui'
@@ -78,11 +78,13 @@ export default function TaskDetailPage() {
   const completeMutation = useMutation({
     mutationFn: () => tasksApi.complete(taskId, { close_issue: true, merge_pr: completeAction === 'merge_pr' }),
     onSuccess: (data) => {
-      // Complete closes the issue and optionally merges the PR — both sub-resources
-      // need a refresh, along with the core task status.
+      queryClient.setQueryData<TaskDetail>(['task', taskId], (prev) =>
+        prev ? { ...prev, task: { ...prev.task, status: 'succeeded' } } : prev,
+      )
       queryClient.invalidateQueries({ queryKey: ['task', taskId], exact: true })
       queryClient.invalidateQueries({ queryKey: ['task', taskId, 'issue'] })
       queryClient.invalidateQueries({ queryKey: ['task', taskId, 'pull-request'] })
+      queryClient.invalidateQueries({ queryKey: ['tasks'] })
       setShowCompleteOptions(false)
       toast(data.actions.join(', '), 'success')
     },

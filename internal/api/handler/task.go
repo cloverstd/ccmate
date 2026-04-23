@@ -537,7 +537,13 @@ func (h *TaskHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 3. Mark task as succeeded
-	_, _ = h.client.Task.UpdateOneID(id).SetStatus(enttask.StatusSucceeded).Save(ctx)
+	prevStatus := string(t.Status)
+	if _, err := h.client.Task.UpdateOneID(id).SetStatus(enttask.StatusSucceeded).Save(ctx); err != nil {
+		slog.Error("failed to persist task completion status", "task_id", id, "error", err)
+		http.Error(w, `{"error":"failed to persist task completion status"}`, http.StatusInternalServerError)
+		return
+	}
+	scheduler.PublishStatusChange(h.broker, id, prevStatus, string(enttask.StatusSucceeded))
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status":  "completed",
