@@ -2664,6 +2664,8 @@ type ProjectMutation struct {
 	addreview_agent_profile_id    *int
 	default_prompt_template_id    *int
 	adddefault_prompt_template_id *int
+	review_prompt_template_id     *int
+	addreview_prompt_template_id  *int
 	prompt_template_scope         *project.PromptTemplateScope
 	created_at                    *time.Time
 	updated_at                    *time.Time
@@ -3167,6 +3169,76 @@ func (m *ProjectMutation) ResetDefaultPromptTemplateID() {
 	delete(m.clearedFields, project.FieldDefaultPromptTemplateID)
 }
 
+// SetReviewPromptTemplateID sets the "review_prompt_template_id" field.
+func (m *ProjectMutation) SetReviewPromptTemplateID(i int) {
+	m.review_prompt_template_id = &i
+	m.addreview_prompt_template_id = nil
+}
+
+// ReviewPromptTemplateID returns the value of the "review_prompt_template_id" field in the mutation.
+func (m *ProjectMutation) ReviewPromptTemplateID() (r int, exists bool) {
+	v := m.review_prompt_template_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldReviewPromptTemplateID returns the old "review_prompt_template_id" field's value of the Project entity.
+// If the Project object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProjectMutation) OldReviewPromptTemplateID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldReviewPromptTemplateID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldReviewPromptTemplateID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldReviewPromptTemplateID: %w", err)
+	}
+	return oldValue.ReviewPromptTemplateID, nil
+}
+
+// AddReviewPromptTemplateID adds i to the "review_prompt_template_id" field.
+func (m *ProjectMutation) AddReviewPromptTemplateID(i int) {
+	if m.addreview_prompt_template_id != nil {
+		*m.addreview_prompt_template_id += i
+	} else {
+		m.addreview_prompt_template_id = &i
+	}
+}
+
+// AddedReviewPromptTemplateID returns the value that was added to the "review_prompt_template_id" field in this mutation.
+func (m *ProjectMutation) AddedReviewPromptTemplateID() (r int, exists bool) {
+	v := m.addreview_prompt_template_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearReviewPromptTemplateID clears the value of the "review_prompt_template_id" field.
+func (m *ProjectMutation) ClearReviewPromptTemplateID() {
+	m.review_prompt_template_id = nil
+	m.addreview_prompt_template_id = nil
+	m.clearedFields[project.FieldReviewPromptTemplateID] = struct{}{}
+}
+
+// ReviewPromptTemplateIDCleared returns if the "review_prompt_template_id" field was cleared in this mutation.
+func (m *ProjectMutation) ReviewPromptTemplateIDCleared() bool {
+	_, ok := m.clearedFields[project.FieldReviewPromptTemplateID]
+	return ok
+}
+
+// ResetReviewPromptTemplateID resets all changes to the "review_prompt_template_id" field.
+func (m *ProjectMutation) ResetReviewPromptTemplateID() {
+	m.review_prompt_template_id = nil
+	m.addreview_prompt_template_id = nil
+	delete(m.clearedFields, project.FieldReviewPromptTemplateID)
+}
+
 // SetPromptTemplateScope sets the "prompt_template_scope" field.
 func (m *ProjectMutation) SetPromptTemplateScope(pts project.PromptTemplateScope) {
 	m.prompt_template_scope = &pts
@@ -3417,7 +3489,7 @@ func (m *ProjectMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ProjectMutation) Fields() []string {
-	fields := make([]string, 0, 11)
+	fields := make([]string, 0, 12)
 	if m.name != nil {
 		fields = append(fields, project.FieldName)
 	}
@@ -3441,6 +3513,9 @@ func (m *ProjectMutation) Fields() []string {
 	}
 	if m.default_prompt_template_id != nil {
 		fields = append(fields, project.FieldDefaultPromptTemplateID)
+	}
+	if m.review_prompt_template_id != nil {
+		fields = append(fields, project.FieldReviewPromptTemplateID)
 	}
 	if m.prompt_template_scope != nil {
 		fields = append(fields, project.FieldPromptTemplateScope)
@@ -3475,6 +3550,8 @@ func (m *ProjectMutation) Field(name string) (ent.Value, bool) {
 		return m.ReviewAgentProfileID()
 	case project.FieldDefaultPromptTemplateID:
 		return m.DefaultPromptTemplateID()
+	case project.FieldReviewPromptTemplateID:
+		return m.ReviewPromptTemplateID()
 	case project.FieldPromptTemplateScope:
 		return m.PromptTemplateScope()
 	case project.FieldCreatedAt:
@@ -3506,6 +3583,8 @@ func (m *ProjectMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldReviewAgentProfileID(ctx)
 	case project.FieldDefaultPromptTemplateID:
 		return m.OldDefaultPromptTemplateID(ctx)
+	case project.FieldReviewPromptTemplateID:
+		return m.OldReviewPromptTemplateID(ctx)
 	case project.FieldPromptTemplateScope:
 		return m.OldPromptTemplateScope(ctx)
 	case project.FieldCreatedAt:
@@ -3577,6 +3656,13 @@ func (m *ProjectMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetDefaultPromptTemplateID(v)
 		return nil
+	case project.FieldReviewPromptTemplateID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetReviewPromptTemplateID(v)
+		return nil
 	case project.FieldPromptTemplateScope:
 		v, ok := value.(project.PromptTemplateScope)
 		if !ok {
@@ -3615,6 +3701,9 @@ func (m *ProjectMutation) AddedFields() []string {
 	if m.adddefault_prompt_template_id != nil {
 		fields = append(fields, project.FieldDefaultPromptTemplateID)
 	}
+	if m.addreview_prompt_template_id != nil {
+		fields = append(fields, project.FieldReviewPromptTemplateID)
+	}
 	return fields
 }
 
@@ -3629,6 +3718,8 @@ func (m *ProjectMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedReviewAgentProfileID()
 	case project.FieldDefaultPromptTemplateID:
 		return m.AddedDefaultPromptTemplateID()
+	case project.FieldReviewPromptTemplateID:
+		return m.AddedReviewPromptTemplateID()
 	}
 	return nil, false
 }
@@ -3659,6 +3750,13 @@ func (m *ProjectMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddDefaultPromptTemplateID(v)
 		return nil
+	case project.FieldReviewPromptTemplateID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddReviewPromptTemplateID(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Project numeric field %s", name)
 }
@@ -3675,6 +3773,9 @@ func (m *ProjectMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(project.FieldDefaultPromptTemplateID) {
 		fields = append(fields, project.FieldDefaultPromptTemplateID)
+	}
+	if m.FieldCleared(project.FieldReviewPromptTemplateID) {
+		fields = append(fields, project.FieldReviewPromptTemplateID)
 	}
 	return fields
 }
@@ -3698,6 +3799,9 @@ func (m *ProjectMutation) ClearField(name string) error {
 		return nil
 	case project.FieldDefaultPromptTemplateID:
 		m.ClearDefaultPromptTemplateID()
+		return nil
+	case project.FieldReviewPromptTemplateID:
+		m.ClearReviewPromptTemplateID()
 		return nil
 	}
 	return fmt.Errorf("unknown Project nullable field %s", name)
@@ -3730,6 +3834,9 @@ func (m *ProjectMutation) ResetField(name string) error {
 		return nil
 	case project.FieldDefaultPromptTemplateID:
 		m.ResetDefaultPromptTemplateID()
+		return nil
+	case project.FieldReviewPromptTemplateID:
+		m.ResetReviewPromptTemplateID()
 		return nil
 	case project.FieldPromptTemplateScope:
 		m.ResetPromptTemplateScope()

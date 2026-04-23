@@ -23,6 +23,7 @@ func (Project) Fields() []ent.Field {
 		field.Int("default_agent_profile_id").Optional().Nillable(),
 		field.Int("review_agent_profile_id").Optional().Nillable(),
 		field.Int("default_prompt_template_id").Optional().Nillable(),
+		field.Int("review_prompt_template_id").Optional().Nillable(),
 		field.Enum("prompt_template_scope").Values("global_only", "project_only", "merged").Default("project_only"),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),

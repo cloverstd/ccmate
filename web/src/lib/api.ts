@@ -43,7 +43,7 @@ export const settingsApi = {
 // Projects
 export interface Project {
   id: number; name: string; repo_url: string; git_provider: string
-  default_branch: string; auto_mode: boolean; default_agent_profile_id: number | null; review_agent_profile_id: number | null; default_prompt_template_id: number | null
+  default_branch: string; auto_mode: boolean; default_agent_profile_id: number | null; review_agent_profile_id: number | null; default_prompt_template_id: number | null; review_prompt_template_id: number | null
   prompt_template_scope: 'global_only' | 'project_only' | 'merged'
   created_at: string; updated_at: string
 }

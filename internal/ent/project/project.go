@@ -31,6 +31,8 @@ const (
 	FieldReviewAgentProfileID = "review_agent_profile_id"
 	// FieldDefaultPromptTemplateID holds the string denoting the default_prompt_template_id field in the database.
 	FieldDefaultPromptTemplateID = "default_prompt_template_id"
+	// FieldReviewPromptTemplateID holds the string denoting the review_prompt_template_id field in the database.
+	FieldReviewPromptTemplateID = "review_prompt_template_id"
 	// FieldPromptTemplateScope holds the string denoting the prompt_template_scope field in the database.
 	FieldPromptTemplateScope = "prompt_template_scope"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
@@ -70,6 +72,7 @@ var Columns = []string{
 	FieldDefaultAgentProfileID,
 	FieldReviewAgentProfileID,
 	FieldDefaultPromptTemplateID,
+	FieldReviewPromptTemplateID,
 	FieldPromptTemplateScope,
 	FieldCreatedAt,
 	FieldUpdatedAt,
@@ -177,6 +180,11 @@ func ByReviewAgentProfileID(opts ...sql.OrderTermOption) OrderOption {
 // ByDefaultPromptTemplateID orders the results by the default_prompt_template_id field.
 func ByDefaultPromptTemplateID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldDefaultPromptTemplateID, opts...).ToFunc()
+}
+
+// ByReviewPromptTemplateID orders the results by the review_prompt_template_id field.
+func ByReviewPromptTemplateID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldReviewPromptTemplateID, opts...).ToFunc()
 }
 
 // ByPromptTemplateScope orders the results by the prompt_template_scope field.

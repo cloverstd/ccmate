@@ -33,6 +33,8 @@ type Project struct {
 	ReviewAgentProfileID *int `json:"review_agent_profile_id,omitempty"`
 	// DefaultPromptTemplateID holds the value of the "default_prompt_template_id" field.
 	DefaultPromptTemplateID *int `json:"default_prompt_template_id,omitempty"`
+	// ReviewPromptTemplateID holds the value of the "review_prompt_template_id" field.
+	ReviewPromptTemplateID *int `json:"review_prompt_template_id,omitempty"`
 	// PromptTemplateScope holds the value of the "prompt_template_scope" field.
 	PromptTemplateScope project.PromptTemplateScope `json:"prompt_template_scope,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
@@ -81,7 +83,7 @@ func (*Project) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case project.FieldAutoMode:
 			values[i] = new(sql.NullBool)
-		case project.FieldID, project.FieldDefaultAgentProfileID, project.FieldReviewAgentProfileID, project.FieldDefaultPromptTemplateID:
+		case project.FieldID, project.FieldDefaultAgentProfileID, project.FieldReviewAgentProfileID, project.FieldDefaultPromptTemplateID, project.FieldReviewPromptTemplateID:
 			values[i] = new(sql.NullInt64)
 		case project.FieldName, project.FieldRepoURL, project.FieldGitProvider, project.FieldDefaultBranch, project.FieldPromptTemplateScope:
 			values[i] = new(sql.NullString)
@@ -158,6 +160,13 @@ func (_m *Project) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.DefaultPromptTemplateID = new(int)
 				*_m.DefaultPromptTemplateID = int(value.Int64)
+			}
+		case project.FieldReviewPromptTemplateID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field review_prompt_template_id", values[i])
+			} else if value.Valid {
+				_m.ReviewPromptTemplateID = new(int)
+				*_m.ReviewPromptTemplateID = int(value.Int64)
 			}
 		case project.FieldPromptTemplateScope:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -250,6 +259,11 @@ func (_m *Project) String() string {
 	builder.WriteString(", ")
 	if v := _m.DefaultPromptTemplateID; v != nil {
 		builder.WriteString("default_prompt_template_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.ReviewPromptTemplateID; v != nil {
+		builder.WriteString("review_prompt_template_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
