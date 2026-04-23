@@ -27,16 +27,30 @@ export default function TaskDetailPage() {
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Fire core + issue/pr/git in parallel so the page renders the moment the core arrives.
+  // Heavy external calls (GitHub API, local git fetch) no longer block initial render.
   const { data: taskDetail, isLoading } = useQuery({
     queryKey: ['task', taskId], queryFn: () => tasksApi.get(taskId),
+    enabled: taskId > 0,
+  })
+  const issueQuery = useQuery({
+    queryKey: ['task', taskId, 'issue'], queryFn: () => tasksApi.getIssue(taskId),
+    enabled: taskId > 0,
+  })
+  const prQuery = useQuery({
+    queryKey: ['task', taskId, 'pull-request'], queryFn: () => tasksApi.getPullRequest(taskId),
+    enabled: taskId > 0,
+  })
+  const gitQuery = useQuery({
+    queryKey: ['task', taskId, 'git'], queryFn: () => tasksApi.getGit(taskId),
     enabled: taskId > 0,
   })
 
   const task = taskDetail?.task
   const workspacePath = taskDetail?.workspace_path
-  const issue = taskDetail?.issue
-  const pullRequest = taskDetail?.pull_request
-  const git = taskDetail?.git
+  const issue = issueQuery.data?.issue
+  const pullRequest = prQuery.data?.pull_request
+  const git = gitQuery.data?.git
   const agentProfile = taskDetail?.agent_profile
   const promptSnapshot = task?.edges?.prompt_snapshot
 
@@ -53,22 +67,30 @@ export default function TaskDetailPage() {
     onSuccess: () => {
       setMessageInput(''); setThinking(true)
       setPendingMessages([])
-      queryClient.invalidateQueries({ queryKey: ['task', taskId] })
+      queryClient.invalidateQueries({ queryKey: ['task', taskId], exact: true })
     },
     onError: () => { setPendingMessages([]) },
   })
   const uploadMutation = useMutation({
     mutationFn: (file: File) => tasksApi.uploadAttachment(taskId, file),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId], exact: true }),
   })
   const completeMutation = useMutation({
     mutationFn: () => tasksApi.complete(taskId, { close_issue: true, merge_pr: completeAction === 'merge_pr' }),
-    onSuccess: (data) => { queryClient.invalidateQueries({ queryKey: ['task', taskId] }); setShowCompleteOptions(false); toast(data.actions.join(', '), 'success') },
+    onSuccess: (data) => {
+      // Complete closes the issue and optionally merges the PR — both sub-resources
+      // need a refresh, along with the core task status.
+      queryClient.invalidateQueries({ queryKey: ['task', taskId], exact: true })
+      queryClient.invalidateQueries({ queryKey: ['task', taskId, 'issue'] })
+      queryClient.invalidateQueries({ queryKey: ['task', taskId, 'pull-request'] })
+      setShowCompleteOptions(false)
+      toast(data.actions.join(', '), 'success')
+    },
   })
-  const pauseMutation = useMutation({ mutationFn: () => tasksApi.pause(taskId), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId] }) })
-  const resumeMutation = useMutation({ mutationFn: () => tasksApi.resume(taskId), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId] }) })
-  const retryMutation = useMutation({ mutationFn: () => tasksApi.retry(taskId), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId] }) })
-  const cancelMutation = useMutation({ mutationFn: () => tasksApi.cancel(taskId), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId] }) })
+  const pauseMutation = useMutation({ mutationFn: () => tasksApi.pause(taskId), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId], exact: true }) })
+  const resumeMutation = useMutation({ mutationFn: () => tasksApi.resume(taskId), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId], exact: true }) })
+  const retryMutation = useMutation({ mutationFn: () => tasksApi.retry(taskId), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId], exact: true }) })
+  const cancelMutation = useMutation({ mutationFn: () => tasksApi.cancel(taskId), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', taskId], exact: true }) })
 
   useEffect(() => {
     if (!taskId) return
@@ -84,8 +106,16 @@ export default function TaskDetailPage() {
       }
       if (event.type === 'turn.completed') setThinking(false)
       if (event.type === 'task.failed' || event.type === 'task.completed') setThinking(false)
-      if (event.type === 'task.status' || event.type === 'task.completed' || event.type === 'task.failed' || event.type === 'message.created')
-        queryClient.invalidateQueries({ queryKey: ['task', taskId] })
+      if (event.type === 'task.status' || event.type === 'task.completed' || event.type === 'task.failed' || event.type === 'message.created') {
+        // Core task (messages, status) - always refresh.
+        queryClient.invalidateQueries({ queryKey: ['task', taskId], exact: true })
+        // PR/git state often changes when the task transitions; issue state rarely does,
+        // but a cheap re-fetch keeps things consistent without blocking the UI.
+        if (event.type !== 'message.created') {
+          queryClient.invalidateQueries({ queryKey: ['task', taskId, 'pull-request'] })
+          queryClient.invalidateQueries({ queryKey: ['task', taskId, 'git'] })
+        }
+      }
     })
     return unsub
   }, [taskId, queryClient])
@@ -228,7 +258,7 @@ export default function TaskDetailPage() {
                     <span className="text-gray-500 truncate max-w-xs">{git.latest_commit.message}</span>
                   </>
                 )}
-                <button onClick={() => queryClient.invalidateQueries({ queryKey: ['task', taskId] })}
+                <button onClick={() => queryClient.invalidateQueries({ queryKey: ['task', taskId, 'git'] })}
                   className="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-gray-600 hover:bg-gray-200" title="Refresh">↻</button>
               </div>
             )}
@@ -281,7 +311,7 @@ export default function TaskDetailPage() {
                 issue: '', pr: '',
               }
               return (
-                <button key={tab} onClick={() => { setActiveTab(tab); if (tab === 'issue' || tab === 'pr') queryClient.invalidateQueries({ queryKey: ['task', taskId] }) }}
+                <button key={tab} onClick={() => { setActiveTab(tab); if (tab === 'issue') queryClient.invalidateQueries({ queryKey: ['task', taskId, 'issue'] }); if (tab === 'pr') queryClient.invalidateQueries({ queryKey: ['task', taskId, 'pull-request'] }) }}
                   className={`pb-2 text-sm font-medium capitalize ${activeTab === tab ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}>
                   {tab}{counts[tab] ? ` (${counts[tab]})` : ''}
                 </button>
@@ -305,9 +335,9 @@ export default function TaskDetailPage() {
             scrollContainerRef={scrollContainerRef} isNearBottomRef={isNearBottomRef}
             showScrollBtn={showScrollBtn} setShowScrollBtn={setShowScrollBtn} />
         ) : activeTab === 'issue' ? (
-          <IssueTab issue={issue ?? undefined} repoUrl={task.edges.project?.repo_url} />
+          <IssueTab issue={issue ?? undefined} repoUrl={task.edges.project?.repo_url} loading={issueQuery.isLoading} />
         ) : (
-          <PRTab pullRequest={pullRequest ?? undefined} />
+          <PRTab pullRequest={pullRequest ?? undefined} loading={prQuery.isLoading} />
         )}
       </div>
     </div>
@@ -856,7 +886,14 @@ function EventsTab({ historyEvents, liveEvents, endRef, scrollContainerRef, isNe
 // Issue & PR Tabs
 // ============================================================
 
-function IssueTab({ issue, repoUrl }: { issue?: RepoIssue; repoUrl?: string }) {
+function IssueTab({ issue, repoUrl, loading }: { issue?: RepoIssue; repoUrl?: string; loading?: boolean }) {
+  if (loading && !issue) return (
+    <div className="flex-1 min-h-0 p-6 space-y-3 overflow-y-auto">
+      <Skeleton className="h-5 w-40" />
+      <Skeleton className="h-6 w-3/4" />
+      <Skeleton className="h-24 w-full" />
+    </div>
+  )
   if (!issue) return <div className="p-6 text-sm text-gray-400 text-center">Issue data unavailable.</div>
   const stateColor = issue.state === 'open' ? 'green' : issue.state === 'closed' ? 'red' : 'gray'
   return (
@@ -878,7 +915,14 @@ function IssueTab({ issue, repoUrl }: { issue?: RepoIssue; repoUrl?: string }) {
   )
 }
 
-function PRTab({ pullRequest }: { pullRequest?: RepoPR }) {
+function PRTab({ pullRequest, loading }: { pullRequest?: RepoPR; loading?: boolean }) {
+  if (loading && !pullRequest) return (
+    <div className="flex-1 min-h-0 p-6 space-y-3 overflow-y-auto">
+      <Skeleton className="h-5 w-40" />
+      <Skeleton className="h-6 w-3/4" />
+      <Skeleton className="h-24 w-full" />
+    </div>
+  )
   if (!pullRequest) return <div className="p-6 text-sm text-gray-400 text-center">No PR associated with this task.</div>
   const checkColor = pullRequest.check_status === 'success' ? 'green' : pullRequest.check_status === 'failure' ? 'red' : pullRequest.check_status === 'pending' ? 'yellow' : 'gray'
   return (
