@@ -149,6 +149,7 @@ type PullRequest struct {
 	User         string       `json:"user"`
 	HTMLURL      string       `json:"html_url"`
 	Head         string       `json:"head"`
+	HeadSHA      string       `json:"head_sha"`
 	Base         string       `json:"base"`
 	CheckStatus  string       `json:"check_status,omitempty"`  // "success", "failure", "pending", "error", ""
 	CheckDetails []CheckRun   `json:"check_details,omitempty"` // individual check runs
@@ -161,6 +162,15 @@ type CheckRun struct {
 	Name       string `json:"name"`
 	Status     string `json:"status"`     // "queued", "in_progress", "completed"
 	Conclusion string `json:"conclusion"` // "success", "failure", "neutral", etc.
+}
+
+// CommitStatus describes a GitHub commit status update.
+// State is one of: pending, success, failure, error.
+type CommitStatus struct {
+	State       string
+	Context     string
+	Description string
+	TargetURL   string
 }
 
 // Review represents a PR review.
