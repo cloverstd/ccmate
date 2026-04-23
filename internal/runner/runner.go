@@ -548,7 +548,13 @@ func (r *Runner) loadReviewPromptTemplate(ctx context.Context, proj *ent.Project
 		return
 	}
 	tmpl, err := r.client.PromptTemplate.Query().
-		Where(prompttemplate.ID(*proj.ReviewPromptTemplateID)).
+		Where(
+			prompttemplate.ID(*proj.ReviewPromptTemplateID),
+			prompttemplate.Or(
+				prompttemplate.ProjectIDIsNil(),
+				prompttemplate.ProjectID(proj.ID),
+			),
+		).
 		Only(ctx)
 	if err != nil || tmpl == nil {
 		slog.Warn("review prompt template not loadable",
