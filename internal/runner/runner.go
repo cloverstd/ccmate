@@ -262,6 +262,7 @@ func (r *Runner) RunTask(ctx context.Context, taskID int) error {
 	maxLogMB, _ := strconv.Atoi(r.settingsMgr.GetWithDefault(ctx, settings.KeyMaxLogSizeMB, "50"))
 	maxLogBytes := int64(maxLogMB) * 1024 * 1024
 	var agentErrors []string
+	var turnCompleted bool
 
 	for event := range eventCh {
 		sequence++
@@ -336,12 +337,15 @@ func (r *Runner) RunTask(ctx context.Context, taskID int) error {
 		// Turn is done when the adapter explicitly signals it, or the channel closes.
 		// The adapter layer owns provider-specific completion detection; runner stays provider-neutral.
 		if event.Type == model.AgentEventTurnCompleted {
+			turnCompleted = true
 			break
 		}
 	}
 
-	// If agent had errors, fail the task
-	if len(agentErrors) > 0 {
+	// stderr banners (e.g. codex "Reading additional input from stdin...") surface
+	// as AgentEventError but are informational. Only treat them as fatal if the
+	// turn never completed.
+	if len(agentErrors) > 0 && !turnCompleted {
 		return r.failTask(ctx, taskID, fmt.Errorf("agent error: %s", strings.Join(agentErrors, "; ")))
 	}
 
@@ -884,6 +888,7 @@ func (r *Runner) runReviewTask(
 	var lastMessage strings.Builder
 	var deltaBuf strings.Builder
 	var agentErrors []string
+	var turnCompleted bool
 	for event := range eventCh {
 		*sequence++
 		sanitized := sanitize.SanitizeMap(event.Payload)
@@ -921,6 +926,7 @@ func (r *Runner) runReviewTask(
 			}
 		}
 		if event.Type == model.AgentEventTurnCompleted {
+			turnCompleted = true
 			break
 		}
 	}
@@ -930,7 +936,11 @@ func (r *Runner) runReviewTask(
 
 	r.cleanupCredentials(ws.RepoPath)
 
-	if len(agentErrors) > 0 {
+	// stderr banners (e.g. codex "Reading additional input from stdin...") surface
+	// as AgentEventError but are informational. Only treat them as fatal if the
+	// turn never completed — a completed turn with structured output is a success
+	// regardless of side-channel chatter.
+	if len(agentErrors) > 0 && !turnCompleted {
 		return r.failTask(ctx, taskID, fmt.Errorf("agent error: %s", strings.Join(agentErrors, "; ")))
 	}
 
