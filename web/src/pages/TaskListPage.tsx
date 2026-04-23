@@ -32,7 +32,7 @@ export default function TaskListPage() {
 
   useEffect(() => {
     const unsub = subscribeToTasksEvents((event) => {
-      if (event.type === 'task.status' || event.type === 'task.completed' || event.type === 'task.failed' || event.type === 'task.created') {
+      if (event.type === 'task.status' || event.type === 'task.failed' || event.type === 'task.created') {
         queryClient.invalidateQueries({ queryKey: ['tasks'] })
       }
     })

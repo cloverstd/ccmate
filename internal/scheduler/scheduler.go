@@ -60,6 +60,21 @@ func (s *Scheduler) SetNotifyManager(nm *notify.Manager) {
 	s.notifyMgr = nm
 }
 
+// PublishStatusChange broadcasts a task.status SSE event to both the per-task
+// topic and the global tasks topic. Safe to call with a nil broker.
+func PublishStatusChange(broker *sse.Broker, taskID int, from, to string) {
+	if broker == nil {
+		return
+	}
+	payload := map[string]interface{}{
+		"task_id": taskID,
+		"from":    from,
+		"to":      to,
+	}
+	broker.Publish(fmt.Sprintf("task:%d", taskID), sse.Event{Type: "task.status", Data: payload})
+	broker.Publish("tasks", sse.Event{Type: "task.status", Data: payload})
+}
+
 // transitionAndNotify wraps TransitionTask with notification dispatch.
 func (s *Scheduler) transitionAndNotify(ctx context.Context, taskID int, from, to model.TaskStatus) error {
 	err := TransitionTask(ctx, s.client, taskID, from, to)
@@ -67,15 +82,7 @@ func (s *Scheduler) transitionAndNotify(ctx context.Context, taskID int, from, t
 		if s.notifyMgr != nil {
 			s.notifyMgr.OnStatusChange(ctx, taskID, string(from), string(to))
 		}
-		if s.broker != nil {
-			payload := map[string]interface{}{
-				"task_id": taskID,
-				"from":    string(from),
-				"to":      string(to),
-			}
-			s.broker.Publish(fmt.Sprintf("task:%d", taskID), sse.Event{Type: "task.status", Data: payload})
-			s.broker.Publish("tasks", sse.Event{Type: "task.status", Data: payload})
-		}
+		PublishStatusChange(s.broker, taskID, string(from), string(to))
 	}
 	return err
 }
