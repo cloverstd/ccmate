@@ -152,7 +152,7 @@ func (r *Runner) RunTask(ctx context.Context, taskID int) error {
 		logStep("init", fmt.Sprintf("Starting task #%d for project %s, issue #%d", taskID, proj.Name, t.IssueNumber))
 
 		logStep("workspace", fmt.Sprintf("Preparing workspace at %s", ws.RepoPath))
-		if err := ws.Prepare(); err != nil {
+		if err := ws.PrepareClean(); err != nil {
 			return r.failTask(ctx, taskID, fmt.Errorf("preparing workspace: %w", err))
 		}
 
@@ -842,7 +842,7 @@ func (r *Runner) runReviewTask(
 
 	// Clone the PR head branch so the agent can read repo files for context.
 	logStep("workspace", fmt.Sprintf("Preparing workspace at %s", ws.RepoPath))
-	if err := ws.Prepare(); err != nil {
+	if err := ws.PrepareClean(); err != nil {
 		return r.failTask(ctx, taskID, fmt.Errorf("preparing workspace: %w", err))
 	}
 	headBranch := pr.Head
