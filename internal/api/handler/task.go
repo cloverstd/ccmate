@@ -264,6 +264,10 @@ func parseRepoURLFromString(url string) model.RepoRef {
 	return model.RepoRef{}
 }
 
+// Get returns the fast core of a task: task DB record + workspace_path + agent_profile.
+// Slower data sourced from GitHub (issue, pull_request) and local git (git summary) are
+// served by dedicated endpoints so the detail page can render immediately while those
+// pieces load in parallel. See GetIssue/GetPullRequest/GetGit below.
 func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
@@ -289,22 +293,91 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build response with extra fields
 	basePath := h.settingsMgr.GetWithDefault(r.Context(), settings.KeyStorageBasePath, "data")
 	var workspacePath string
-	var issue *model.Issue
-	var pr *model.PullRequest
-	var git *taskGitSummary
 	if t.Edges.Project != nil {
 		workspacePath = filepath.Join(basePath, "workspaces", fmt.Sprintf("%d", t.Edges.Project.ID), fmt.Sprintf("%d", t.ID), "repo")
+	}
+
+	var agentProfile *ent.AgentProfile
+	if t.AgentProfileID != nil {
+		agentProfile, _ = h.client.AgentProfile.Get(r.Context(), *t.AgentProfileID)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"task":           t,
+		"workspace_path": workspacePath,
+		"agent_profile":  agentProfile,
+	})
+}
+
+// loadTaskWithProject loads a task with its project edge for the sub-detail endpoints.
+func (h *TaskHandler) loadTaskWithProject(w http.ResponseWriter, r *http.Request) (*ent.Task, bool) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, `{"error":"invalid id"}`, http.StatusBadRequest)
+		return nil, false
+	}
+	t, err := h.client.Task.Query().Where(enttask.ID(id)).WithProject().Only(r.Context())
+	if err != nil {
+		if ent.IsNotFound(err) {
+			http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
+		} else {
+			http.Error(w, `{"error":"failed to get task"}`, http.StatusInternalServerError)
+		}
+		return nil, false
+	}
+	return t, true
+}
+
+// GetIssue returns the GitHub issue linked to the task. Served separately so the detail
+// page isn't blocked when the GitHub API is slow or unavailable.
+func (h *TaskHandler) GetIssue(w http.ResponseWriter, r *http.Request) {
+	t, ok := h.loadTaskWithProject(w, r)
+	if !ok {
+		return
+	}
+	// Null is reserved for "no project/provider configured"; provider failures surface
+	// as 502 so the frontend can distinguish empty state from transient errors.
+	var issue *model.Issue
+	if t.Edges.Project != nil {
+		repo := parseRepoURLFromString(t.Edges.Project.RepoURL)
+		if gp := h.gitProv(); gp != nil && repo.Owner != "" {
+			var err error
+			issue, err = gp.GetIssue(r.Context(), repo, t.IssueNumber)
+			if err != nil {
+				slog.Warn("failed to fetch task issue", "task_id", t.ID, "issue_number", t.IssueNumber, "error", err)
+				http.Error(w, `{"error":"failed to fetch issue from git provider"}`, http.StatusBadGateway)
+				return
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"issue": issue})
+}
+
+// GetPullRequest returns the PR associated with the task (by pr_number or by branch name).
+func (h *TaskHandler) GetPullRequest(w http.ResponseWriter, r *http.Request) {
+	t, ok := h.loadTaskWithProject(w, r)
+	if !ok {
+		return
+	}
+	// Distinguish three cases: no PR exists (null), provider not configured (still build
+	// a minimal stub from task.pr_number if present), provider failed (502).
+	var pr *model.PullRequest
+	if t.Edges.Project != nil {
 		repo := parseRepoURLFromString(t.Edges.Project.RepoURL)
 		gp := h.gitProv()
 		if gp != nil && repo.Owner != "" {
-			issue, _ = gp.GetIssue(r.Context(), repo, t.IssueNumber)
 			if t.PrNumber != nil && *t.PrNumber > 0 {
-				pr, _ = gp.GetPullRequest(r.Context(), repo, *t.PrNumber)
-				// Fallback: build minimal PR info from task data if API fails
-				if pr == nil {
+				fetched, err := gp.GetPullRequest(r.Context(), repo, *t.PrNumber)
+				if err != nil {
+					slog.Warn("failed to fetch task pull request", "task_id", t.ID, "pr_number", *t.PrNumber, "error", err)
+					http.Error(w, `{"error":"failed to fetch pull request from git provider"}`, http.StatusBadGateway)
+					return
+				}
+				if fetched != nil {
+					pr = fetched
+				} else {
 					pr = &model.PullRequest{
 						Number:  *t.PrNumber,
 						HTMLURL: fmt.Sprintf("%s/pull/%d", t.Edges.Project.RepoURL, *t.PrNumber),
@@ -313,27 +386,42 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if pr == nil {
-				// Try to find PR by branch name
+				basePath := h.settingsMgr.GetWithDefault(r.Context(), settings.KeyStorageBasePath, "data")
 				ws := runner.NewWorkspace(filepath.Join(basePath, "workspaces"), t.Edges.Project.ID, t.ID)
 				branchName := ws.BranchName(t.IssueNumber)
-				pr, _ = gp.FindPullRequestByHead(r.Context(), repo, branchName)
+				found, err := gp.FindPullRequestByHead(r.Context(), repo, branchName)
+				if err != nil {
+					slog.Warn("failed to find PR by head", "task_id", t.ID, "branch", branchName, "error", err)
+					http.Error(w, `{"error":"failed to locate pull request from git provider"}`, http.StatusBadGateway)
+					return
+				}
+				pr = found
 			}
-		} else if t.PrNumber != nil && *t.PrNumber > 0 && t.Edges.Project != nil {
-			// No git provider but we have pr_number — build link from repo URL
+		} else if t.PrNumber != nil && *t.PrNumber > 0 {
 			pr = &model.PullRequest{
 				Number:  *t.PrNumber,
 				HTMLURL: fmt.Sprintf("%s/pull/%d", t.Edges.Project.RepoURL, *t.PrNumber),
 				State:   "unknown",
 			}
 		}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"pull_request": pr})
+}
 
+// GetGit returns the local-git summary (current branch, latest commit, branch list) for
+// the task's workspace. Does a fetch under the hood — can take seconds, so isolated here.
+func (h *TaskHandler) GetGit(w http.ResponseWriter, r *http.Request) {
+	t, ok := h.loadTaskWithProject(w, r)
+	if !ok {
+		return
+	}
+	var git *taskGitSummary
+	if t.Edges.Project != nil {
+		basePath := h.settingsMgr.GetWithDefault(r.Context(), settings.KeyStorageBasePath, "data")
 		ws := runner.NewWorkspace(filepath.Join(basePath, "workspaces"), t.Edges.Project.ID, t.ID)
-		expectedBranch := ws.BranchName(t.IssueNumber)
-		git = &taskGitSummary{Branch: expectedBranch}
+		git = &taskGitSummary{Branch: ws.BranchName(t.IssueNumber)}
 		if _, err := os.Stat(ws.RepoPath); err == nil {
-			// Fetch latest remote refs into local workspace
 			_ = runner.FetchProject(r.Context(), ws.RepoPath)
-			// Read actual current branch from local repo
 			if actual, err := runner.CurrentBranch(r.Context(), ws.RepoPath); err == nil && actual != "" {
 				git.Branch = actual
 			}
@@ -341,7 +429,6 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 			if err == nil && len(commits) > 0 {
 				git.LatestCommit = &commits[0]
 			}
-			// List branches from local workspace (includes local + remote-tracking)
 			localBranches, err := runner.ListBranches(r.Context(), ws.RepoPath)
 			if err == nil {
 				gitBranches := make([]model.RepoBranch, len(localBranches))
@@ -352,21 +439,7 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-
-	// Load agent profile if set
-	var agentProfile *ent.AgentProfile
-	if t.AgentProfileID != nil {
-		agentProfile, _ = h.client.AgentProfile.Get(r.Context(), *t.AgentProfileID)
-	}
-
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"task":           t,
-		"workspace_path": workspacePath,
-		"issue":          issue,
-		"pull_request":   pr,
-		"git":            git,
-		"agent_profile":  agentProfile,
-	})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"git": git})
 }
 
 func (h *TaskHandler) Pause(w http.ResponseWriter, r *http.Request) {

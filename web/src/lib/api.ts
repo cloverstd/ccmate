@@ -147,10 +147,15 @@ export interface SessionEvent { id: number; event_type: string; payload_json: st
 
 export interface TaskGitSummary { branch: string; latest_commit?: CommitInfo | null; branches?: BranchInfo[] | null }
 export interface PromptSnapshot { id: number; system_prompt: string; task_prompt: string; model_name: string; model_version: string; created_at: string }
+// TaskDetail is the fast core — task record + workspace_path + agent_profile.
+// Issue, PR, and git summary now live on dedicated endpoints (see tasksApi.getIssue,
+// getPullRequest, getGit) so the detail page can render without waiting on GitHub/git.
 export interface TaskDetail {
-  task: Task; workspace_path: string; issue?: RepoIssue | null; pull_request?: RepoPR | null
-  git?: TaskGitSummary | null; agent_profile?: AgentProfile | null
+  task: Task; workspace_path: string; agent_profile?: AgentProfile | null
 }
+export interface TaskIssueResponse { issue: RepoIssue | null }
+export interface TaskPullRequestResponse { pull_request: RepoPR | null }
+export interface TaskGitResponse { git: TaskGitSummary | null }
 
 export const tasksApi = {
   list: (params?: { status?: string; project_id?: string }) => {
@@ -158,6 +163,9 @@ export const tasksApi = {
     return request<Task[]>(`/tasks${query ? '?' + query : ''}`)
   },
   get: (id: number) => request<TaskDetail>(`/tasks/${id}`),
+  getIssue: (id: number) => request<TaskIssueResponse>(`/tasks/${id}/issue`),
+  getPullRequest: (id: number) => request<TaskPullRequestResponse>(`/tasks/${id}/pull-request`),
+  getGit: (id: number) => request<TaskGitResponse>(`/tasks/${id}/git`),
   create: (data: { project_id: number; issue_number: number; type?: string; agent_profile_id?: number }) =>
     request<Task>('/tasks', { method: 'POST', body: JSON.stringify(data) }),
   createFromPrompt: (data: { project_id: number; title: string; body: string; labels?: string[]; agent_profile_id?: number }) =>
