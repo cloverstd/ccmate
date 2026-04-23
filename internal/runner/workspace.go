@@ -34,6 +34,16 @@ func (w *Workspace) Prepare() error {
 	return os.MkdirAll(w.RepoPath, 0755)
 }
 
+// PrepareClean wipes any existing repo contents (leftover from a prior failed
+// or cancelled run) and recreates an empty directory. Use this before `git
+// clone`, which refuses to write into a non-empty destination.
+func (w *Workspace) PrepareClean() error {
+	if err := os.RemoveAll(w.RepoPath); err != nil {
+		return fmt.Errorf("cleaning repo path: %w", err)
+	}
+	return os.MkdirAll(w.RepoPath, 0755)
+}
+
 // BranchName returns the standard branch name for this task.
 func (w *Workspace) BranchName(issueNumber int) string {
 	return model.TaskBranchName(issueNumber, w.TaskID)
