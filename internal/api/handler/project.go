@@ -111,12 +111,17 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		builder = builder.SetDefaultPromptTemplateID(*req.DefaultPromptTemplateID)
 	}
 	if req.ReviewPromptTemplateID != nil {
-		if _, err := h.client.PromptTemplate.Get(r.Context(), *req.ReviewPromptTemplateID); err != nil {
+		tpl, err := h.client.PromptTemplate.Get(r.Context(), *req.ReviewPromptTemplateID)
+		if err != nil {
 			if ent.IsNotFound(err) {
 				http.Error(w, `{"error":"review prompt template not found"}`, http.StatusBadRequest)
 				return
 			}
 			http.Error(w, `{"error":"failed to validate review prompt template"}`, http.StatusInternalServerError)
+			return
+		}
+		if tpl.ProjectID != nil {
+			http.Error(w, `{"error":"review prompt template must be global when creating a project"}`, http.StatusBadRequest)
 			return
 		}
 		builder = builder.SetReviewPromptTemplateID(*req.ReviewPromptTemplateID)
@@ -190,12 +195,17 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 		builder = builder.ClearDefaultPromptTemplateID()
 	}
 	if req.ReviewPromptTemplateID != nil {
-		if _, err := h.client.PromptTemplate.Get(r.Context(), *req.ReviewPromptTemplateID); err != nil {
+		tpl, err := h.client.PromptTemplate.Get(r.Context(), *req.ReviewPromptTemplateID)
+		if err != nil {
 			if ent.IsNotFound(err) {
 				http.Error(w, `{"error":"review prompt template not found"}`, http.StatusBadRequest)
 				return
 			}
 			http.Error(w, `{"error":"failed to validate review prompt template"}`, http.StatusInternalServerError)
+			return
+		}
+		if tpl.ProjectID != nil && *tpl.ProjectID != id {
+			http.Error(w, `{"error":"review prompt template does not belong to this project"}`, http.StatusBadRequest)
 			return
 		}
 		builder = builder.SetReviewPromptTemplateID(*req.ReviewPromptTemplateID)
