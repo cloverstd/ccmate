@@ -833,6 +833,30 @@ func (r *Runner) runReviewTask(
 	if err != nil {
 		return r.failTask(ctx, taskID, fmt.Errorf("loading PR: %w", err))
 	}
+
+	// Surface progress in the PR's "all checks" section (commit status API).
+	// ccmate/review — pending → success/failure/error depending on outcome.
+	headSHA := pr.HeadSHA
+	postStatus := func(state, desc string) {
+		if headSHA == "" || r.gitProvider == nil {
+			return
+		}
+		if len(desc) > 140 {
+			desc = desc[:137] + "..."
+		}
+		if serr := r.gitProvider.CreateCommitStatus(ctx, repo, headSHA, model.CommitStatus{
+			State: state, Context: "ccmate/review", Description: desc, TargetURL: pr.HTMLURL,
+		}); serr != nil {
+			logStep("commit_status_failed", serr.Error())
+		}
+	}
+	postStatus("pending", fmt.Sprintf("ccmate reviewing (iteration %d)", t.ReviewIteration))
+	reviewCompleted := false
+	defer func() {
+		if !reviewCompleted {
+			postStatus("error", "ccmate review did not complete")
+		}
+	}()
 	diff, err := r.gitProvider.GetPullRequestDiff(ctx, repo, prNum)
 	if err != nil {
 		return r.failTask(ctx, taskID, fmt.Errorf("loading PR diff: %w", err))
@@ -994,6 +1018,28 @@ func (r *Runner) runReviewTask(
 	} else {
 		logStep("review_posted", fmt.Sprintf("Posted %s review on PR #%d", event, prNum))
 	}
+
+	// Mirror the verdict into a GitHub commit status so it appears in the PR
+	// "all checks have passed" area. REQUEST_CHANGES → failure (blocks merge
+	// only if a branch protection rule requires this context); APPROVE and
+	// COMMENT → success.
+	finalState := "success"
+	if event == "REQUEST_CHANGES" {
+		finalState = "failure"
+	}
+	statusDesc := verdict.Summary
+	if statusDesc == "" {
+		switch event {
+		case "APPROVE":
+			statusDesc = "ccmate review approved"
+		case "REQUEST_CHANGES":
+			statusDesc = "ccmate requested changes"
+		default:
+			statusDesc = "ccmate review completed"
+		}
+	}
+	postStatus(finalState, statusDesc)
+	reviewCompleted = true
 
 	// If the agent wants changes, enqueue a review_fix task to address them.
 	if event == "REQUEST_CHANGES" {

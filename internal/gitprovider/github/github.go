@@ -339,7 +339,7 @@ func (p *Provider) CreatePullRequest(ctx context.Context, repo model.RepoRef, re
 	return &model.PullRequest{
 		Number: pr.GetNumber(), Title: pr.GetTitle(), Body: pr.GetBody(),
 		State: pr.GetState(), User: pr.GetUser().GetLogin(), HTMLURL: pr.GetHTMLURL(),
-		Head: pr.GetHead().GetRef(), Base: pr.GetBase().GetRef(),
+		Head: pr.GetHead().GetRef(), HeadSHA: pr.GetHead().GetSHA(), Base: pr.GetBase().GetRef(),
 		CreatedAt: pr.GetCreatedAt().Time, UpdatedAt: pr.GetUpdatedAt().Time,
 	}, nil
 }
@@ -352,7 +352,7 @@ func (p *Provider) GetPullRequest(ctx context.Context, repo model.RepoRef, prNum
 	result := &model.PullRequest{
 		Number: pr.GetNumber(), Title: pr.GetTitle(), Body: pr.GetBody(),
 		State: pr.GetState(), User: pr.GetUser().GetLogin(), HTMLURL: pr.GetHTMLURL(),
-		Head: pr.GetHead().GetRef(), Base: pr.GetBase().GetRef(),
+		Head: pr.GetHead().GetRef(), HeadSHA: pr.GetHead().GetSHA(), Base: pr.GetBase().GetRef(),
 		Mergeable: pr.Mergeable,
 		CreatedAt: pr.GetCreatedAt().Time, UpdatedAt: pr.GetUpdatedAt().Time,
 	}
@@ -388,7 +388,7 @@ func (p *Provider) FindPullRequestByHead(ctx context.Context, repo model.RepoRef
 	return &model.PullRequest{
 		Number: pr.GetNumber(), Title: pr.GetTitle(), Body: pr.GetBody(),
 		State: pr.GetState(), User: pr.GetUser().GetLogin(), HTMLURL: pr.GetHTMLURL(),
-		Head: pr.GetHead().GetRef(), Base: pr.GetBase().GetRef(),
+		Head: pr.GetHead().GetRef(), HeadSHA: pr.GetHead().GetSHA(), Base: pr.GetBase().GetRef(),
 		CreatedAt: pr.GetCreatedAt().Time, UpdatedAt: pr.GetUpdatedAt().Time,
 	}, nil
 }
@@ -459,6 +459,24 @@ func (p *Provider) RemoveIssueReaction(ctx context.Context, repo model.RepoRef, 
 	return nil
 }
 
+func (p *Provider) CreateCommitStatus(ctx context.Context, repo model.RepoRef, sha string, status model.CommitStatus) error {
+	if sha == "" {
+		return fmt.Errorf("commit sha required")
+	}
+	s := &gh.RepoStatus{
+		State:       gh.Ptr(status.State),
+		Context:     gh.Ptr(status.Context),
+		Description: gh.Ptr(status.Description),
+	}
+	if status.TargetURL != "" {
+		s.TargetURL = gh.Ptr(status.TargetURL)
+	}
+	if _, _, err := p.client.Repositories.CreateStatus(ctx, repo.Owner, repo.Name, sha, s); err != nil {
+		return fmt.Errorf("creating commit status: %w", err)
+	}
+	return nil
+}
+
 func (p *Provider) GetPullRequestDiff(ctx context.Context, repo model.RepoRef, prNumber int) (string, error) {
 	diff, _, err := p.client.PullRequests.GetRaw(ctx, repo.Owner, repo.Name, prNumber, gh.RawOptions{Type: gh.Diff})
 	if err != nil {
@@ -525,7 +543,7 @@ func (p *Provider) ListRepoPRs(ctx context.Context, repo model.RepoRef) ([]model
 		result[i] = model.PullRequest{
 			Number: pr.GetNumber(), Title: pr.GetTitle(), Body: pr.GetBody(),
 			State: pr.GetState(), HTMLURL: pr.GetHTMLURL(),
-			Head: pr.GetHead().GetRef(), Base: pr.GetBase().GetRef(),
+			Head: pr.GetHead().GetRef(), HeadSHA: pr.GetHead().GetSHA(), Base: pr.GetBase().GetRef(),
 			CreatedAt: pr.GetCreatedAt().Time, UpdatedAt: pr.GetUpdatedAt().Time,
 		}
 	}
